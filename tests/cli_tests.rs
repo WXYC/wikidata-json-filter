@@ -69,6 +69,25 @@ fn limit_flag_stops_early() {
 }
 
 #[test]
+fn stdin_piping() {
+    let output_dir = TempDir::new().unwrap();
+    let input = fs::read("tests/fixtures/small_dump.json").unwrap();
+
+    Command::cargo_bin("wikidata-json-filter")
+        .unwrap()
+        .arg("-")
+        .arg("--output-dir")
+        .arg(output_dir.path())
+        .write_stdin(input)
+        .assert()
+        .success();
+
+    let entity_csv = fs::read_to_string(output_dir.path().join("entity.csv")).unwrap();
+    assert_eq!(entity_csv.lines().count(), 4, "Expected 3 music entities + header");
+    assert!(entity_csv.contains("Autechre"));
+}
+
+#[test]
 fn missing_input_fails() {
     Command::cargo_bin("wikidata-json-filter")
         .unwrap()

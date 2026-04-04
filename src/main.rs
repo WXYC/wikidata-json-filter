@@ -9,6 +9,7 @@ use crossbeam_channel::bounded;
 use flate2::read::GzDecoder;
 use rayon::prelude::*;
 use std::io::{BufRead, BufReader};
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -22,8 +23,8 @@ use wikidata_json_filter::writer::CsvOutput;
 #[command(name = "wikidata-json-filter")]
 #[command(about = "Filter Wikidata JSON dumps to music-relevant entities")]
 struct Cli {
-    /// Path to the Wikidata JSON dump (plain or .gz)
-    input: PathBuf,
+    /// Path to the Wikidata JSON dump (plain or .gz), or "-" for stdin
+    input: OsString,
 
     /// Output directory for CSV files
     #[arg(long, default_value = "output")]
@@ -36,6 +37,10 @@ struct Cli {
     /// Log progress every N entities
     #[arg(long, default_value = "1000000")]
     progress_interval: u64,
+
+    /// Force gzip decompression (auto-detected for .gz files, required for stdin)
+    #[arg(long)]
+    gzip: bool,
 }
 
 /// Batch size for sending lines to the worker pool.
@@ -52,18 +57,32 @@ fn main() -> Result<()> {
     let total_entities = AtomicU64::new(0);
     let matched_entities = AtomicU64::new(0);
 
-    // Open input (gzipped or plain)
-    let file = std::fs::File::open(&cli.input)
-        .with_context(|| format!("Failed to open {}", cli.input.display()))?;
+    // Open input: file path or "-" for stdin
+    let is_stdin = cli.input == "-";
+    let use_gzip = cli.gzip
+        || (!is_stdin
+            && PathBuf::from(&cli.input)
+                .extension()
+                .is_some_and(|ext| ext == "gz"));
 
-    let reader: Box<dyn BufRead + Send> = if cli
-        .input
-        .extension()
-        .is_some_and(|ext| ext == "gz")
-    {
-        Box::new(BufReader::with_capacity(8 * 1024 * 1024, GzDecoder::new(file)))
+    // Stdin is read via /dev/stdin as a file so the reader is Send.
+    let reader: Box<dyn BufRead + Send> = if is_stdin {
+        let file = std::fs::File::open("/dev/stdin")
+            .context("Failed to open stdin")?;
+        if use_gzip {
+            Box::new(BufReader::with_capacity(8 * 1024 * 1024, GzDecoder::new(file)))
+        } else {
+            Box::new(BufReader::with_capacity(8 * 1024 * 1024, file))
+        }
     } else {
-        Box::new(BufReader::with_capacity(8 * 1024 * 1024, file))
+        let path = PathBuf::from(&cli.input);
+        let file = std::fs::File::open(&path)
+            .with_context(|| format!("Failed to open {}", path.display()))?;
+        if use_gzip {
+            Box::new(BufReader::with_capacity(8 * 1024 * 1024, GzDecoder::new(file)))
+        } else {
+            Box::new(BufReader::with_capacity(8 * 1024 * 1024, file))
+        }
     };
 
     // Set up CSV output

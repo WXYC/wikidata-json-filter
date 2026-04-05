@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::bounded;
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
 use std::io::{BufRead, BufReader};
 use std::ffi::OsString;
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
         let file = std::fs::File::open("/dev/stdin")
             .context("Failed to open stdin")?;
         if use_gzip {
-            Box::new(BufReader::with_capacity(8 * 1024 * 1024, GzDecoder::new(file)))
+            Box::new(BufReader::with_capacity(8 * 1024 * 1024, MultiGzDecoder::new(file)))
         } else {
             Box::new(BufReader::with_capacity(8 * 1024 * 1024, file))
         }
@@ -79,7 +79,7 @@ fn main() -> Result<()> {
         let file = std::fs::File::open(&path)
             .with_context(|| format!("Failed to open {}", path.display()))?;
         if use_gzip {
-            Box::new(BufReader::with_capacity(8 * 1024 * 1024, GzDecoder::new(file)))
+            Box::new(BufReader::with_capacity(8 * 1024 * 1024, MultiGzDecoder::new(file)))
         } else {
             Box::new(BufReader::with_capacity(8 * 1024 * 1024, file))
         }

@@ -100,7 +100,13 @@ fn main() -> Result<()> {
         let mut count: u64 = 0;
 
         for line_result in reader.lines() {
-            let line = line_result?;
+            let line = match line_result {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("Warning: read error (truncated stream?): {e}");
+                    break;
+                }
+            };
             let trimmed = line.trim();
 
             // Skip JSON array boundaries

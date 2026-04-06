@@ -21,6 +21,8 @@ pub mod props {
     pub const RECORD_LABEL: &str = "P264";
     pub const PARENT_ORG: &str = "P749";
     pub const MUSICBRAINZ_ARTIST_ID: &str = "P434";
+    pub const APPLE_MUSIC_ARTIST_ID: &str = "P2850";
+    pub const BANDCAMP_ID: &str = "P3283";
 }
 
 /// Musician-related occupation QIDs (P106 values).

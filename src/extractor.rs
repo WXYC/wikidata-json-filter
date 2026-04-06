@@ -154,6 +154,24 @@ pub fn extract(entity: &Entity) -> ExtractedRows {
         });
     }
 
+    // Apple Music artist ID (P2850)
+    for val in entity.string_values(props::APPLE_MUSIC_ARTIST_ID) {
+        rows.discogs_mappings.push(DiscogsMappingRow {
+            qid: qid.clone(),
+            property: "P2850".to_string(),
+            discogs_id: val.to_string(),
+        });
+    }
+
+    // Bandcamp profile ID (P3283)
+    for val in entity.string_values(props::BANDCAMP_ID) {
+        rows.discogs_mappings.push(DiscogsMappingRow {
+            qid: qid.clone(),
+            property: "P3283".to_string(),
+            discogs_id: val.to_string(),
+        });
+    }
+
     // Influences (P737)
     for target_qid in entity.entity_ids(props::INFLUENCED_BY) {
         rows.influences.push(InfluenceRow {
@@ -311,6 +329,25 @@ mod tests {
         assert_eq!(mb_mappings.len(), 1);
         assert_eq!(mb_mappings[0].discogs_id, "410c9baf-5469-44f6-9852-826524b80c61");
         assert_eq!(mb_mappings[0].qid, "Q247237");
+    }
+
+    #[test]
+    fn extract_apple_music_and_bandcamp_ids() {
+        let entity = parse(r#"{
+            "id": "Q187923",
+            "claims": {
+                "P1953": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "12"}}}],
+                "P2850": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "5765873"}}}],
+                "P3283": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "autechre"}}}]
+            }
+        }"#);
+        let rows = extract(&entity);
+        let apple: Vec<_> = rows.discogs_mappings.iter().filter(|m| m.property == "P2850").collect();
+        assert_eq!(apple.len(), 1);
+        assert_eq!(apple[0].discogs_id, "5765873");
+        let bandcamp: Vec<_> = rows.discogs_mappings.iter().filter(|m| m.property == "P3283").collect();
+        assert_eq!(bandcamp.len(), 1);
+        assert_eq!(bandcamp[0].discogs_id, "autechre");
     }
 
     #[test]

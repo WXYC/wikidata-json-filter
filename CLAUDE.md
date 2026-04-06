@@ -9,8 +9,8 @@ Purpose-built Rust tool for filtering Wikidata JSON data dumps to music-relevant
 ### Modules
 
 - `model.rs` -- Data structures for Wikidata JSON entities. Only fields needed for filtering and extraction are modeled; everything else is skipped during deserialization via `serde`. Key types: `Entity`, `Statement`, `Snak`, `DataValue`.
-- `filter.rs` -- Music-relevance filter. Primary indicators: P1953 (Discogs artist ID), P1902 (Discogs label ID), P106 (musician occupation), P31 (musical group / record label). Secondary properties (P737, P136, P264, P749) are extracted but don't independently qualify entities.
-- `extractor.rs` -- Extracts flat CSV rows from matched entities. Classifies entity type (human/group/label/other) from P31/P106 claims. Produces rows for 8 output tables.
+- `filter.rs` -- Music-relevance filter. Primary indicators: P1953 (Discogs artist ID), P1902 (Spotify artist ID), P106 (musician occupation), P31 (musical group / record label). Secondary properties (P737, P136, P264, P749, P2850, P3283) are extracted but don't independently qualify entities.
+- `extractor.rs` -- Extracts flat CSV rows from matched entities. Classifies entity type (human/group/label/other) from P31/P106 claims. Produces rows for 8 output tables. Extracts external IDs (P1953 Discogs, P434 MusicBrainz, P1902 Spotify, P2850 Apple Music, P3283 Bandcamp) into `discogs_mapping.csv`.
 - `writer.rs` -- `CsvOutput` writes 8 CSV files with headers matching the wikidata-cache PostgreSQL schema.
 - `main.rs` -- CLI (clap derive) and three-stage pipeline.
 
@@ -47,7 +47,7 @@ An entity is music-relevant if it has ANY primary indicator (each sufficient on 
 - **P106** (occupation) with a musician-related QID. The full set is defined in `filter.rs::MUSICIAN_QIDS`.
 - **P31** (instance of) with a musical group or record label QID. The full set is defined in `filter.rs::MUSICAL_GROUP_QIDS`.
 
-Secondary properties (P737 influence, P136 genre, P264 record label, P749 parent org) are extracted only from entities that pass the primary filter. They don't independently qualify an entity.
+Secondary properties (P737 influence, P136 genre, P264 record label, P749 parent org, P2850 Apple Music artist ID, P3283 Bandcamp profile ID) are extracted only from entities that pass the primary filter. They don't independently qualify an entity.
 
 ## Development
 

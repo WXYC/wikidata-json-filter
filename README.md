@@ -38,7 +38,7 @@ An entity is included if it has any of these properties:
 | P106 | Occupation = musician, singer, DJ, composer, etc. | |
 | P31 | Instance of musical group, band, or record label | |
 
-From matched entities, the filter also extracts: P737 (influenced by), P136 (genre), P264 (record label), P749 (parent organization), and English aliases.
+From matched entities, the filter also extracts: P737 (influenced by), P136 (genre), P264 (record label), P749 (parent organization), P434 (MusicBrainz artist ID), P2850 (Apple Music artist ID), P3283 (Bandcamp profile ID), and English aliases.
 
 ## CSV Output
 
@@ -47,7 +47,7 @@ Produces 8 CSV files:
 | File | Columns | Description |
 |------|---------|-------------|
 | `entity.csv` | qid, label, description, entity_type | Core entity metadata |
-| `discogs_mapping.csv` | qid, property, discogs_id | Links to Discogs IDs |
+| `discogs_mapping.csv` | qid, property, discogs_id | External IDs (P1953 Discogs, P1902 Spotify, P434 MusicBrainz, P2850 Apple Music, P3283 Bandcamp) |
 | `influence.csv` | source_qid, target_qid | P737 influence relationships |
 | `genre.csv` | entity_qid, genre_qid | P136 genre claims |
 | `record_label.csv` | artist_qid, label_qid | P264 record label claims |

@@ -20,6 +20,7 @@ pub mod props {
     pub const GENRE: &str = "P136";
     pub const RECORD_LABEL: &str = "P264";
     pub const PARENT_ORG: &str = "P749";
+    pub const MUSICBRAINZ_ARTIST_ID: &str = "P434";
 }
 
 /// Musician-related occupation QIDs (P106 values).

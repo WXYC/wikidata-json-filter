@@ -145,6 +145,15 @@ pub fn extract(entity: &Entity) -> ExtractedRows {
         });
     }
 
+    // MusicBrainz artist ID (P434)
+    for val in entity.string_values(props::MUSICBRAINZ_ARTIST_ID) {
+        rows.discogs_mappings.push(DiscogsMappingRow {
+            qid: qid.clone(),
+            property: "P434".to_string(),
+            discogs_id: val.to_string(),
+        });
+    }
+
     // Influences (P737)
     for target_qid in entity.entity_ids(props::INFLUENCED_BY) {
         rows.influences.push(InfluenceRow {
@@ -282,6 +291,26 @@ mod tests {
         assert_eq!(rows.label_hierarchies.len(), 1);
         assert_eq!(rows.label_hierarchies[0].child_qid, "Q1312934");
         assert_eq!(rows.label_hierarchies[0].parent_qid, "Q21077");
+    }
+
+    #[test]
+    fn extract_musicbrainz_id() {
+        let entity = parse(r#"{
+            "id": "Q247237",
+            "claims": {
+                "P1953": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "41"}}}],
+                "P434": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "410c9baf-5469-44f6-9852-826524b80c61"}}}]
+            }
+        }"#);
+        let rows = extract(&entity);
+        let mb_mappings: Vec<_> = rows
+            .discogs_mappings
+            .iter()
+            .filter(|m| m.property == "P434")
+            .collect();
+        assert_eq!(mb_mappings.len(), 1);
+        assert_eq!(mb_mappings[0].discogs_id, "410c9baf-5469-44f6-9852-826524b80c61");
+        assert_eq!(mb_mappings[0].qid, "Q247237");
     }
 
     #[test]

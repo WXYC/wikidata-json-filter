@@ -26,13 +26,15 @@ fn filters_small_dump() {
     assert!(!entity_csv.contains("Van Gogh"));
     assert!(!entity_csv.contains("Belgium"));
 
-    // Discogs mappings: Autechre (P1953:12), Warp (P1902:23528), Stereolab (P1953:4965)
+    // External ID mappings: Autechre (P1953:12, P434:UUID), Warp (P1902:23528), Stereolab (P1953:4965)
     let mapping_csv = fs::read_to_string(output_dir.path().join("discogs_mapping.csv")).unwrap();
     assert!(mapping_csv.contains("P1953"));
     assert!(mapping_csv.contains("P1902"));
+    assert!(mapping_csv.contains("P434"));
     assert!(mapping_csv.contains("12"));
     assert!(mapping_csv.contains("23528"));
     assert!(mapping_csv.contains("4965"));
+    assert!(mapping_csv.contains("410c9baf-5469-44f6-9852-826524b80c61"));
 
     // Influences: Autechre -> Q49835
     let influence_csv = fs::read_to_string(output_dir.path().join("influence.csv")).unwrap();

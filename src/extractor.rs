@@ -4,17 +4,30 @@ use crate::filter::props;
 use crate::model::Entity;
 
 /// The entity type derived from P31/P106 claims.
+///
+/// Uses P31 (instance of) as the primary signal, with P1953/P1902
+/// as a fallback to distinguish artists from labels when P31 is
+/// an unrecognized subclass.
 pub fn classify_entity_type(entity: &Entity) -> &'static str {
     let instance_of = entity.entity_ids(props::INSTANCE_OF);
 
-    // Record label
+    // Record label (P31 or has P1902 Discogs label ID without P1953)
     if instance_of.contains(&"Q18127") {
         return "label";
     }
 
-    // Musical group / band / ensemble
+    // Musical group / band / ensemble (including common subclasses)
     for qid in &instance_of {
-        if matches!(*qid, "Q5741069" | "Q215380" | "Q56816954") {
+        if matches!(
+            *qid,
+            "Q5741069"  // musical group
+                | "Q215380"   // musical group (band)
+                | "Q56816954" // musical ensemble
+                | "Q9212979"  // musical duo
+                | "Q207628"   // musical composition
+                | "Q2088357"  // musical supergroup
+                | "Q20639856" // musical collective
+        ) {
             return "group";
         }
     }
@@ -22,6 +35,16 @@ pub fn classify_entity_type(entity: &Entity) -> &'static str {
     // Human (check P31 for Q5)
     if instance_of.contains(&"Q5") {
         return "human";
+    }
+
+    // Fallback: if the entity has a Discogs artist ID, it's likely an artist
+    if !entity.string_values(props::DISCOGS_ARTIST_ID).is_empty() {
+        return "human";
+    }
+
+    // If it has a Discogs label ID, it's a label
+    if !entity.string_values(props::DISCOGS_LABEL_ID).is_empty() {
+        return "label";
     }
 
     "other"

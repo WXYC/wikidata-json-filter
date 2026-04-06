@@ -59,9 +59,17 @@ pub struct EntityIdValue {
 }
 
 impl Entity {
-    /// Get the English label, or None.
+    /// Get the English label, falling back to other Latin-script languages.
     pub fn en_label(&self) -> Option<&str> {
-        self.labels.get("en").map(|v| v.value.as_str())
+        // Prefer English, then fall back through common Latin-script languages
+        const FALLBACKS: &[&str] = &["en", "fr", "de", "es", "it", "pt", "nl", "pl", "cs"];
+        for lang in FALLBACKS {
+            if let Some(v) = self.labels.get(*lang) {
+                return Some(v.value.as_str());
+            }
+        }
+        // Last resort: any available label
+        self.labels.values().next().map(|v| v.value.as_str())
     }
 
     /// Get the English description, or None.

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Purpose-built Rust tool for filtering Wikidata JSON data dumps to music-relevant entities, producing CSV files compatible with the [wikidata-cache](https://github.com/WXYC/wikidata-cache) ETL pipeline. Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-converter) for Discogs data.
+Purpose-built Rust tool for filtering Wikidata JSON data dumps to music-relevant entities, producing CSV files compatible with the [wikidata-cache](https://github.com/WXYC/wikidata-cache) ETL pipeline. Also provides an `import` subcommand to load those CSVs into PostgreSQL, creating the wikidata-cache database. Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-converter) for Discogs data.
 
 ## Architecture
 
@@ -12,7 +12,9 @@ Purpose-built Rust tool for filtering Wikidata JSON data dumps to music-relevant
 - `filter.rs` -- Music-relevance filter. Primary indicators: P1953 (Discogs artist ID), P1902 (Spotify artist ID), P106 (musician occupation), P31 (musical group / record label). Secondary properties (P737, P136, P264, P749, P2850, P3283) are extracted but don't independently qualify entities.
 - `extractor.rs` -- Extracts flat CSV rows from matched entities. Classifies entity type (human/group/label/other) from P31/P106 claims. Produces rows for 8 output tables. Extracts external IDs (P1953 Discogs, P434 MusicBrainz, P1902 Spotify, P2850 Apple Music, P3283 Bandcamp) into `discogs_mapping.csv`.
 - `writer.rs` -- `CsvOutput` wraps `wxyc_etl::csv_writer::MultiCsvWriter` for 8 CSV files with headers matching the wikidata-cache PostgreSQL schema. Implements `wxyc_etl::pipeline::PipelineOutput<ExtractedRows>`. The `csv_file_specs()` function defines the 8-file spec.
-- `main.rs` -- CLI (clap derive) and three-stage pipeline via `wxyc_etl::pipeline`.
+- `import.rs` -- CSV import module. Reads the 8 CSV files and streams them into PostgreSQL via COPY TEXT. Handles RFC 4180 quoted fields, Unicode, and empty CSVs.
+- `import_schema.rs` -- PostgreSQL schema management. Embeds and applies `schema/create_database.sql`. Provides UNLOGGED/LOGGED toggle and VACUUM FULL for bulk import performance. Table constants define FK-safe import order.
+- `main.rs` -- CLI (clap derive) with subcommand architecture. Default mode runs the three-stage filter pipeline via `wxyc_etl::pipeline`; `import` subcommand loads CSVs into PostgreSQL.
 
 ### Parallel Processing Pipeline
 
@@ -39,6 +41,23 @@ The 8 output CSV files must be compatible with `wikidata-cache/scripts/import_cs
 | `entity_alias.csv` | qid, alias |
 | `occupation.csv` | entity_qid, occupation_qid |
 
+### Import Subcommand
+
+The `import` subcommand loads the 8 CSV files into PostgreSQL:
+
+1. Creates the schema (idempotent with `IF NOT EXISTS`)
+2. Sets tables to UNLOGGED for faster bulk import
+3. Truncates existing data
+4. Streams each CSV via COPY TEXT in FK order (entity first, then child tables)
+5. Restores tables to LOGGED
+6. Runs VACUUM FULL
+
+The `--fresh` flag drops and recreates the schema before importing.
+
+### PostgreSQL Schema
+
+Defined in `schema/create_database.sql` and embedded via `include_str!` in `import_schema.rs`. The schema uses pg_trgm for trigram indexes on `entity.label` and `entity_alias.alias` for fuzzy text search. FK constraints enforce referential integrity from child tables to `entity.qid`, except `influence.target_qid` and `label_hierarchy` which allow dangling references (the target entity may have been filtered out).
+
 ### Filter Criteria
 
 An entity is music-relevant if it has ANY primary indicator (each sufficient on its own):
@@ -58,8 +77,10 @@ All code changes follow test-driven development. No production code without a fa
 ### Testing
 
 ```bash
-cargo test          # all tests (unit + CLI + oracle + PG skipped without DB)
-cargo test --lib    # unit tests only
+cargo test              # all tests (unit + CLI + oracle + PG skipped without DB)
+cargo test --lib        # unit tests only
+cargo test --test cli_tests    # CLI integration tests only
+cargo test --test import_test  # PostgreSQL import tests (requires docker compose up -d)
 
 # PostgreSQL integration tests (requires TEST_DATABASE_URL)
 TEST_DATABASE_URL=postgresql://musicbrainz:musicbrainz@localhost:5434/postgres \
@@ -70,6 +91,7 @@ TEST_DATABASE_URL=postgresql://musicbrainz:musicbrainz@localhost:5434/postgres \
 - **CLI tests** (4): End-to-end binary invocation with small_dump.json fixture.
 - **Oracle tests** (9): CSV output diffed against expected baselines in `tests/fixtures/expected/`.
 - **PG import tests** (13): Full filter -> CSV -> PG import -> query chain. Trigram search on entity names and aliases. Discogs/MusicBrainz ID lookup via indexes. Gated on `TEST_DATABASE_URL`.
+- **Import integration tests**: Require PostgreSQL on port 5435 (started via `docker compose up -d`). Cover schema creation, CSV import for all 8 tables, FK integrity, Unicode handling, and end-to-end pipeline validation.
 
 ### Build
 

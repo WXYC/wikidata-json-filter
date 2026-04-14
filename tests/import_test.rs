@@ -6,6 +6,7 @@
 //! Start with: docker compose up -d
 //! Run with: cargo test --test import_test
 
+use assert_cmd::Command;
 use postgres::{Client, NoTls};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
@@ -543,4 +544,121 @@ fn test_vacuum_after_import() {
     import::import_all(&mut client, fixture_dir()).unwrap();
 
     import_schema::vacuum_full(&mut client).unwrap();
+}
+
+// --- End-to-end test: JSON dump -> CSV -> PostgreSQL ---
+
+#[test]
+fn test_end_to_end_pipeline() {
+    let _lock = lock_db();
+
+    // Step 1: Run wikidata-json-filter on the small JSON dump to produce CSVs
+    let csv_dir = tempfile::TempDir::new().unwrap();
+
+    Command::cargo_bin("wikidata-json-filter")
+        .unwrap()
+        .arg("tests/fixtures/small_dump.json")
+        .arg("--output-dir")
+        .arg(csv_dir.path())
+        .assert()
+        .success();
+
+    // Step 2: Import the CSVs into PostgreSQL
+    let mut client = test_client();
+    fresh_schema(&mut client);
+    import::import_all(&mut client, csv_dir.path()).unwrap();
+
+    // Step 3: Validate the database state matches the 3 music-relevant entities
+    let count: i64 = client
+        .query_one("SELECT COUNT(*) FROM entity", &[])
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 3, "Expected 3 music-relevant entities from small_dump.json");
+
+    // Verify Autechre
+    let row = client
+        .query_one(
+            "SELECT label, entity_type FROM entity WHERE qid = 'Q187923'",
+            &[],
+        )
+        .unwrap();
+    assert_eq!(row.get::<_, &str>(0), "Autechre");
+    assert_eq!(row.get::<_, &str>(1), "group");
+
+    // Verify Warp Records
+    let row = client
+        .query_one(
+            "SELECT label, entity_type FROM entity WHERE qid = 'Q1312934'",
+            &[],
+        )
+        .unwrap();
+    assert_eq!(row.get::<_, &str>(0), "Warp Records");
+    assert_eq!(row.get::<_, &str>(1), "label");
+
+    // Verify Stereolab
+    let row = client
+        .query_one(
+            "SELECT label, entity_type FROM entity WHERE qid = 'Q643023'",
+            &[],
+        )
+        .unwrap();
+    assert_eq!(row.get::<_, &str>(0), "Stereolab");
+    assert_eq!(row.get::<_, &str>(1), "group");
+
+    // Verify discogs mappings
+    let dm_count: i64 = client
+        .query_one("SELECT COUNT(*) FROM discogs_mapping", &[])
+        .unwrap()
+        .get(0);
+    assert!(dm_count >= 4, "Expected at least 4 discogs_mapping rows (P1953, P1902, P434)");
+
+    // Verify Autechre influence -> Kraftwerk
+    let inf_rows = client
+        .query(
+            "SELECT target_qid FROM influence WHERE source_qid = 'Q187923'",
+            &[],
+        )
+        .unwrap();
+    assert_eq!(inf_rows.len(), 1);
+    assert_eq!(inf_rows[0].get::<_, &str>(0), "Q49835");
+
+    // Verify label hierarchy: Warp -> parent
+    let lh_rows = client
+        .query(
+            "SELECT parent_qid FROM label_hierarchy WHERE child_qid = 'Q1312934'",
+            &[],
+        )
+        .unwrap();
+    assert_eq!(lh_rows.len(), 1);
+    assert_eq!(lh_rows[0].get::<_, &str>(0), "Q21077");
+}
+
+// --- CLI import subcommand test ---
+
+#[test]
+fn test_import_subcommand() {
+    let _lock = lock_db();
+
+    // Drop/create schema first so the subcommand has a clean slate
+    let mut client = test_client();
+    import_schema::drop_schema(&mut client).unwrap();
+    drop(client);
+
+    Command::cargo_bin("wikidata-json-filter")
+        .unwrap()
+        .arg("import")
+        .arg("--csv-dir")
+        .arg("tests/fixtures/import")
+        .arg("--database-url")
+        .arg(TEST_DB_URL)
+        .arg("--fresh")
+        .assert()
+        .success();
+
+    let mut client = test_client();
+    let count: i64 = client
+        .query_one("SELECT COUNT(*) FROM entity", &[])
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 5, "Import subcommand should load 5 entities");
 }

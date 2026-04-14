@@ -234,7 +234,8 @@ mod tests {
 
     #[test]
     fn extract_autechre() {
-        let entity = parse(r#"{
+        let entity = parse(
+            r#"{
             "id": "Q187923",
             "labels": {"en": {"language": "en", "value": "Autechre"}},
             "descriptions": {"en": {"language": "en", "value": "British electronic music duo"}},
@@ -246,7 +247,8 @@ mod tests {
                 "P136": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q11399"}}}}],
                 "P264": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q1312934"}}}}]
             }
-        }"#);
+        }"#,
+        );
 
         let rows = extract(&entity);
 
@@ -275,36 +277,42 @@ mod tests {
 
     #[test]
     fn classify_record_label() {
-        let entity = parse(r#"{
+        let entity = parse(
+            r#"{
             "id": "Q1312934",
             "claims": {
                 "P31": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q18127"}}}}]
             }
-        }"#);
+        }"#,
+        );
         assert_eq!(classify_entity_type(&entity), "label");
     }
 
     #[test]
     fn classify_human() {
-        let entity = parse(r#"{
+        let entity = parse(
+            r#"{
             "id": "Q1000",
             "claims": {
                 "P31": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q5"}}}}],
                 "P106": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q130857"}}}}]
             }
-        }"#);
+        }"#,
+        );
         assert_eq!(classify_entity_type(&entity), "human");
     }
 
     #[test]
     fn extract_label_hierarchy() {
-        let entity = parse(r#"{
+        let entity = parse(
+            r#"{
             "id": "Q1312934",
             "claims": {
                 "P31": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q18127"}}}}],
                 "P749": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "id": "Q21077"}}}}]
             }
-        }"#);
+        }"#,
+        );
         let rows = extract(&entity);
         assert_eq!(rows.label_hierarchies.len(), 1);
         assert_eq!(rows.label_hierarchies[0].child_qid, "Q1312934");
@@ -313,13 +321,15 @@ mod tests {
 
     #[test]
     fn extract_musicbrainz_id() {
-        let entity = parse(r#"{
+        let entity = parse(
+            r#"{
             "id": "Q247237",
             "claims": {
                 "P1953": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "41"}}}],
                 "P434": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "410c9baf-5469-44f6-9852-826524b80c61"}}}]
             }
-        }"#);
+        }"#,
+        );
         let rows = extract(&entity);
         let mb_mappings: Vec<_> = rows
             .discogs_mappings
@@ -327,25 +337,38 @@ mod tests {
             .filter(|m| m.property == "P434")
             .collect();
         assert_eq!(mb_mappings.len(), 1);
-        assert_eq!(mb_mappings[0].discogs_id, "410c9baf-5469-44f6-9852-826524b80c61");
+        assert_eq!(
+            mb_mappings[0].discogs_id,
+            "410c9baf-5469-44f6-9852-826524b80c61"
+        );
         assert_eq!(mb_mappings[0].qid, "Q247237");
     }
 
     #[test]
     fn extract_apple_music_and_bandcamp_ids() {
-        let entity = parse(r#"{
+        let entity = parse(
+            r#"{
             "id": "Q187923",
             "claims": {
                 "P1953": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "12"}}}],
                 "P2850": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "5765873"}}}],
                 "P3283": [{"mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "autechre"}}}]
             }
-        }"#);
+        }"#,
+        );
         let rows = extract(&entity);
-        let apple: Vec<_> = rows.discogs_mappings.iter().filter(|m| m.property == "P2850").collect();
+        let apple: Vec<_> = rows
+            .discogs_mappings
+            .iter()
+            .filter(|m| m.property == "P2850")
+            .collect();
         assert_eq!(apple.len(), 1);
         assert_eq!(apple[0].discogs_id, "5765873");
-        let bandcamp: Vec<_> = rows.discogs_mappings.iter().filter(|m| m.property == "P3283").collect();
+        let bandcamp: Vec<_> = rows
+            .discogs_mappings
+            .iter()
+            .filter(|m| m.property == "P3283")
+            .collect();
         assert_eq!(bandcamp.len(), 1);
         assert_eq!(bandcamp[0].discogs_id, "autechre");
     }

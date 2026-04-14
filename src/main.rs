@@ -57,8 +57,7 @@ fn main() -> Result<()> {
 
     // Stdin is read via /dev/stdin as a file so the reader is Send.
     let reader: Box<dyn BufRead + Send> = if is_stdin {
-        let file =
-            std::fs::File::open("/dev/stdin").context("Failed to open stdin")?;
+        let file = std::fs::File::open("/dev/stdin").context("Failed to open stdin")?;
         if use_gzip {
             Box::new(BufReader::with_capacity(
                 8 * 1024 * 1024,
@@ -108,11 +107,11 @@ fn main() -> Result<()> {
                 }
 
                 // Strip trailing comma
-                let json_bytes = if trimmed.ends_with(',') {
-                    trimmed[..trimmed.len() - 1].as_bytes().to_vec()
-                } else {
-                    trimmed.as_bytes().to_vec()
-                };
+                let json_bytes = trimmed
+                    .strip_suffix(',')
+                    .unwrap_or(trimmed)
+                    .as_bytes()
+                    .to_vec();
 
                 // Skip empty lines
                 if json_bytes.is_empty() {

@@ -19,7 +19,10 @@ const OCCUPATION: usize = 7;
 /// Build the 8-file CSV spec for Wikidata entity output.
 pub fn csv_file_specs() -> Vec<CsvFileSpec> {
     vec![
-        CsvFileSpec::new("entity.csv", &["qid", "label", "description", "entity_type"]),
+        CsvFileSpec::new(
+            "entity.csv",
+            &["qid", "label", "description", "entity_type"],
+        ),
         CsvFileSpec::new("discogs_mapping.csv", &["qid", "property", "discogs_id"]),
         CsvFileSpec::new("influence.csv", &["source_qid", "target_qid"]),
         CsvFileSpec::new("genre.csv", &["entity_qid", "genre_qid"]),
@@ -46,15 +49,20 @@ impl CsvOutput {
     /// Write all rows from one extracted entity.
     pub fn write(&mut self, rows: &ExtractedRows) -> Result<()> {
         if let Some(e) = &rows.entity {
-            self.inner
-                .writer(ENTITY)
-                .write_record([&e.qid, &e.label, &e.description, &e.entity_type])?;
+            self.inner.writer(ENTITY).write_record([
+                &e.qid,
+                &e.label,
+                &e.description,
+                &e.entity_type,
+            ])?;
         }
 
         for m in &rows.discogs_mappings {
-            self.inner
-                .writer(DISCOGS_MAPPING)
-                .write_record([&m.qid, &m.property, &m.discogs_id])?;
+            self.inner.writer(DISCOGS_MAPPING).write_record([
+                &m.qid,
+                &m.property,
+                &m.discogs_id,
+            ])?;
         }
 
         for i in &rows.influences {

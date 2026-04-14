@@ -11,16 +11,16 @@ Purpose-built Rust tool for filtering Wikidata JSON data dumps to music-relevant
 - `model.rs` -- Data structures for Wikidata JSON entities. Only fields needed for filtering and extraction are modeled; everything else is skipped during deserialization via `serde`. Key types: `Entity`, `Statement`, `Snak`, `DataValue`.
 - `filter.rs` -- Music-relevance filter. Primary indicators: P1953 (Discogs artist ID), P1902 (Spotify artist ID), P106 (musician occupation), P31 (musical group / record label). Secondary properties (P737, P136, P264, P749, P2850, P3283) are extracted but don't independently qualify entities.
 - `extractor.rs` -- Extracts flat CSV rows from matched entities. Classifies entity type (human/group/label/other) from P31/P106 claims. Produces rows for 8 output tables. Extracts external IDs (P1953 Discogs, P434 MusicBrainz, P1902 Spotify, P2850 Apple Music, P3283 Bandcamp) into `discogs_mapping.csv`.
-- `writer.rs` -- `CsvOutput` writes 8 CSV files with headers matching the wikidata-cache PostgreSQL schema.
-- `main.rs` -- CLI (clap derive) and three-stage pipeline.
+- `writer.rs` -- `CsvOutput` wraps `wxyc_etl::csv_writer::MultiCsvWriter` for 8 CSV files with headers matching the wikidata-cache PostgreSQL schema. Implements `wxyc_etl::pipeline::PipelineOutput<ExtractedRows>`. The `csv_file_specs()` function defines the 8-file spec.
+- `main.rs` -- CLI (clap derive) and three-stage pipeline via `wxyc_etl::pipeline`.
 
 ### Parallel Processing Pipeline
 
-Same three-stage pattern as discogs-xml-converter:
+Uses `wxyc_etl::pipeline` framework (same three-stage pattern as discogs-xml-converter):
 
-1. **Reader thread** -- reads the input (gzipped or plain) via `flate2::GzDecoder` + `BufReader`, reads line by line (the Wikidata dump is `[\n{entity},\n{entity},\n...\n]`), strips array brackets and trailing commas, batches raw byte vectors (256 per batch), sends via bounded crossbeam channel (capacity 64).
-2. **Rayon worker pool** -- receives batches, deserializes JSON via `serde_json::from_slice`, applies music-relevance filter, extracts target fields from matched entities. `par_iter()` preserves input order.
-3. **Writer (main thread)** -- writes extracted rows to 8 CSV files in document order.
+1. **Scanner thread** (`start_scanner`) -- reads the input (gzipped or plain) via `flate2::GzDecoder` + `BufReader`, reads line by line (the Wikidata dump is `[\n{entity},\n{entity},\n...\n]`), strips array brackets and trailing commas, sends raw byte vectors via `BatchSender`. Batch size and channel capacity use `BatchConfig::default()` (256 items, 64 batches).
+2. **Rayon worker pool** (`run_pipeline`) -- receives batches, deserializes JSON via `serde_json::from_slice`, applies music-relevance filter, extracts target fields from matched entities. Preserves input order.
+3. **Writer** (`PipelineOutput`) -- `CsvOutput` writes extracted rows to 8 CSV files in document order.
 
 No SIMD byte scanning needed (unlike discogs-xml-converter) because entity boundaries are newlines.
 

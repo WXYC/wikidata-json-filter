@@ -85,7 +85,11 @@ fn stdin_piping() {
         .success();
 
     let entity_csv = fs::read_to_string(output_dir.path().join("entity.csv")).unwrap();
-    assert_eq!(entity_csv.lines().count(), 4, "Expected 3 music entities + header");
+    assert_eq!(
+        entity_csv.lines().count(),
+        4,
+        "Expected 3 music entities + header"
+    );
     assert!(entity_csv.contains("Autechre"));
 }
 

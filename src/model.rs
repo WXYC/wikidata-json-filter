@@ -147,7 +147,10 @@ mod tests {
         let entity: Entity = serde_json::from_str(autechre_json()).unwrap();
         assert_eq!(entity.id, "Q187923");
         assert_eq!(entity.en_label(), Some("Autechre"));
-        assert_eq!(entity.en_description(), Some("British electronic music duo"));
+        assert_eq!(
+            entity.en_description(),
+            Some("British electronic music duo")
+        );
     }
 
     #[test]

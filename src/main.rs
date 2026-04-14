@@ -2,9 +2,12 @@
 //!
 //! Reads a gzipped Wikidata JSON dump, filters to music-relevant entities,
 //! and writes flat CSV files for loading into PostgreSQL.
+//!
+//! Also provides an `import` subcommand to load the resulting CSV files
+//! into PostgreSQL via COPY.
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
@@ -15,6 +18,8 @@ use wxyc_etl::pipeline::{self, BatchConfig};
 
 use wikidata_json_filter::extractor::extract;
 use wikidata_json_filter::filter::is_music_relevant;
+use wikidata_json_filter::import;
+use wikidata_json_filter::import_schema;
 use wikidata_json_filter::model::Entity;
 use wikidata_json_filter::writer::CsvOutput;
 
@@ -22,8 +27,11 @@ use wikidata_json_filter::writer::CsvOutput;
 #[command(name = "wikidata-json-filter")]
 #[command(about = "Filter Wikidata JSON dumps to music-relevant entities")]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Path to the Wikidata JSON dump (plain or .gz), or "-" for stdin
-    input: OsString,
+    input: Option<OsString>,
 
     /// Output directory for CSV files
     #[arg(long, default_value = "output")]
@@ -42,16 +50,102 @@ struct Cli {
     gzip: bool,
 }
 
+#[derive(Subcommand)]
+enum Commands {
+    /// Import CSV files into PostgreSQL
+    Import {
+        /// Directory containing the 8 CSV files produced by the filter
+        #[arg(long, default_value = "output")]
+        csv_dir: PathBuf,
+
+        /// PostgreSQL connection string
+        #[arg(long, env = "DATABASE_URL")]
+        database_url: String,
+
+        /// Drop and recreate the schema before importing
+        #[arg(long)]
+        fresh: bool,
+    },
+}
+
 fn main() -> Result<()> {
     env_logger::init();
     let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Import {
+            csv_dir,
+            database_url,
+            fresh,
+        }) => run_import(&csv_dir, &database_url, fresh),
+        None => {
+            let input = cli
+                .input
+                .ok_or_else(|| anyhow::anyhow!("Input file is required for filter mode. Use `import` subcommand for CSV-to-PostgreSQL import."))?;
+            run_filter(
+                input,
+                &cli.output_dir,
+                cli.limit,
+                cli.progress_interval,
+                cli.gzip,
+            )
+        }
+    }
+}
+
+fn run_import(csv_dir: &PathBuf, database_url: &str, fresh: bool) -> Result<()> {
+    let start = Instant::now();
+
+    eprintln!("Connecting to PostgreSQL...");
+    let mut client = postgres::Client::connect(database_url, postgres::NoTls)
+        .context("Failed to connect to PostgreSQL")?;
+
+    if fresh {
+        eprintln!("Dropping existing schema...");
+        import_schema::drop_schema(&mut client)?;
+    }
+
+    eprintln!("Creating schema (if not exists)...");
+    import_schema::create_schema(&mut client)?;
+
+    eprintln!("Setting tables to UNLOGGED for bulk import...");
+    import_schema::set_tables_unlogged(&mut client)?;
+
+    eprintln!("Truncating existing data...");
+    import_schema::truncate_all(&mut client)?;
+
+    eprintln!("Importing CSVs from {}...", csv_dir.display());
+    let total = import::import_all(&mut client, csv_dir)?;
+
+    eprintln!("Restoring tables to LOGGED...");
+    import_schema::set_tables_logged(&mut client)?;
+
+    eprintln!("Running VACUUM FULL...");
+    import_schema::vacuum_full(&mut client)?;
+
+    let elapsed = start.elapsed();
+    eprintln!();
+    eprintln!("Done in {:.1}s", elapsed.as_secs_f64());
+    eprintln!("  Total rows imported: {total:>10}");
+    eprintln!("  Source directory:    {}", csv_dir.display());
+
+    Ok(())
+}
+
+fn run_filter(
+    input: OsString,
+    output_dir: &PathBuf,
+    limit: u64,
+    progress_interval: u64,
+    gzip: bool,
+) -> Result<()> {
     let start = Instant::now();
 
     // Open input: file path or "-" for stdin
-    let is_stdin = cli.input == "-";
-    let use_gzip = cli.gzip
+    let is_stdin = input == "-";
+    let use_gzip = gzip
         || (!is_stdin
-            && PathBuf::from(&cli.input)
+            && PathBuf::from(&input)
                 .extension()
                 .is_some_and(|ext| ext == "gz"));
 
@@ -67,7 +161,7 @@ fn main() -> Result<()> {
             Box::new(BufReader::with_capacity(8 * 1024 * 1024, file))
         }
     } else {
-        let path = PathBuf::from(&cli.input);
+        let path = PathBuf::from(&input);
         let file = std::fs::File::open(&path)
             .with_context(|| format!("Failed to open {}", path.display()))?;
         if use_gzip {
@@ -81,11 +175,10 @@ fn main() -> Result<()> {
     };
 
     // Set up CSV output
-    let mut output = CsvOutput::new(&cli.output_dir)
-        .with_context(|| format!("Failed to create output in {}", cli.output_dir.display()))?;
+    let mut output = CsvOutput::new(output_dir)
+        .with_context(|| format!("Failed to create output in {}", output_dir.display()))?;
 
     // Scanner: read lines, strip JSON array delimiters, send byte batches
-    let limit = cli.limit;
     let config = BatchConfig::default();
     let (rx, handle) = pipeline::start_scanner(
         move |tx| {
@@ -159,7 +252,7 @@ fn main() -> Result<()> {
             0.0
         }
     );
-    eprintln!("  Output:           {}", cli.output_dir.display());
+    eprintln!("  Output:           {}", output_dir.display());
 
     Ok(())
 }

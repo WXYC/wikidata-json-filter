@@ -11,7 +11,7 @@ use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use wxyc_etl::pipeline::{self, BatchConfig};
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn run_import(csv_dir: &PathBuf, database_url: &str, fresh: bool) -> Result<()> {
+fn run_import(csv_dir: &Path, database_url: &str, fresh: bool) -> Result<()> {
     let start = Instant::now();
 
     eprintln!("Connecting to PostgreSQL...");
@@ -134,7 +134,7 @@ fn run_import(csv_dir: &PathBuf, database_url: &str, fresh: bool) -> Result<()> 
 
 fn run_filter(
     input: OsString,
-    output_dir: &PathBuf,
+    output_dir: &Path,
     limit: u64,
     progress_interval: u64,
     gzip: bool,

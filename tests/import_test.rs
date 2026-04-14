@@ -573,7 +573,10 @@ fn test_end_to_end_pipeline() {
         .query_one("SELECT COUNT(*) FROM entity", &[])
         .unwrap()
         .get(0);
-    assert_eq!(count, 3, "Expected 3 music-relevant entities from small_dump.json");
+    assert_eq!(
+        count, 3,
+        "Expected 3 music-relevant entities from small_dump.json"
+    );
 
     // Verify Autechre
     let row = client
@@ -610,7 +613,10 @@ fn test_end_to_end_pipeline() {
         .query_one("SELECT COUNT(*) FROM discogs_mapping", &[])
         .unwrap()
         .get(0);
-    assert!(dm_count >= 4, "Expected at least 4 discogs_mapping rows (P1953, P1902, P434)");
+    assert!(
+        dm_count >= 4,
+        "Expected at least 4 discogs_mapping rows (P1953, P1902, P434)"
+    );
 
     // Verify Autechre influence -> Kraftwerk
     let inf_rows = client

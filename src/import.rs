@@ -13,14 +13,34 @@ fn copy_stmt(table: &str, columns: &[&str]) -> String {
 
 /// Table definitions: (table_name, csv_filename, columns).
 const TABLE_DEFS: &[(&str, &str, &[&str])] = &[
-    ("entity", "entity.csv", &["qid", "label", "description", "entity_type"]),
-    ("discogs_mapping", "discogs_mapping.csv", &["qid", "property", "discogs_id"]),
+    (
+        "entity",
+        "entity.csv",
+        &["qid", "label", "description", "entity_type"],
+    ),
+    (
+        "discogs_mapping",
+        "discogs_mapping.csv",
+        &["qid", "property", "discogs_id"],
+    ),
     ("influence", "influence.csv", &["source_qid", "target_qid"]),
     ("genre", "genre.csv", &["entity_qid", "genre_qid"]),
-    ("record_label", "record_label.csv", &["artist_qid", "label_qid"]),
-    ("label_hierarchy", "label_hierarchy.csv", &["child_qid", "parent_qid"]),
+    (
+        "record_label",
+        "record_label.csv",
+        &["artist_qid", "label_qid"],
+    ),
+    (
+        "label_hierarchy",
+        "label_hierarchy.csv",
+        &["child_qid", "parent_qid"],
+    ),
     ("entity_alias", "entity_alias.csv", &["qid", "alias"]),
-    ("occupation", "occupation.csv", &["entity_qid", "occupation_qid"]),
+    (
+        "occupation",
+        "occupation.csv",
+        &["entity_qid", "occupation_qid"],
+    ),
 ];
 
 /// Escape a string value for PostgreSQL COPY TEXT format.
@@ -40,7 +60,13 @@ fn escape_copy_text(s: &str) -> String {
 }
 
 /// Import a single CSV file into the corresponding PostgreSQL table via COPY.
-fn import_csv(client: &mut Client, csv_dir: &Path, table: &str, csv_file: &str, columns: &[&str]) -> Result<u64> {
+fn import_csv(
+    client: &mut Client,
+    csv_dir: &Path,
+    table: &str,
+    csv_file: &str,
+    columns: &[&str],
+) -> Result<u64> {
     let path = csv_dir.join(csv_file);
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -52,7 +78,8 @@ fn import_csv(client: &mut Client, csv_dir: &Path, table: &str, csv_file: &str, 
 
     let mut count: u64 = 0;
     for result in rdr.records() {
-        let record = result.with_context(|| format!("Failed to read CSV record from {csv_file}"))?;
+        let record =
+            result.with_context(|| format!("Failed to read CSV record from {csv_file}"))?;
 
         let mut line = String::new();
         for (i, field) in record.iter().enumerate() {

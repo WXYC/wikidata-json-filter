@@ -5,6 +5,21 @@ use anyhow::Result;
 use csv::Writer;
 use std::fs::File;
 use std::path::Path;
+use wxyc_etl::csv_writer::CsvFileSpec;
+
+/// Build the 8-file CSV spec for Wikidata entity output.
+pub fn csv_file_specs() -> Vec<CsvFileSpec> {
+    vec![
+        CsvFileSpec::new("entity.csv", &["qid", "label", "description", "entity_type"]),
+        CsvFileSpec::new("discogs_mapping.csv", &["qid", "property", "discogs_id"]),
+        CsvFileSpec::new("influence.csv", &["source_qid", "target_qid"]),
+        CsvFileSpec::new("genre.csv", &["entity_qid", "genre_qid"]),
+        CsvFileSpec::new("record_label.csv", &["artist_qid", "label_qid"]),
+        CsvFileSpec::new("label_hierarchy.csv", &["child_qid", "parent_qid"]),
+        CsvFileSpec::new("entity_alias.csv", &["qid", "alias"]),
+        CsvFileSpec::new("occupation.csv", &["entity_qid", "occupation_qid"]),
+    ]
+}
 
 /// Writes extracted entity data to 8 CSV files.
 pub struct CsvOutput {
@@ -172,5 +187,39 @@ mod tests {
         for name in expected {
             assert!(dir.path().join(name).exists(), "{name} should exist");
         }
+    }
+
+    #[test]
+    fn shared_writer_creates_expected_files() {
+        use wxyc_etl::csv_writer::MultiCsvWriter;
+
+        let dir = TempDir::new().unwrap();
+        let specs = csv_file_specs();
+        let writer = MultiCsvWriter::new(dir.path(), &specs).unwrap();
+        drop(writer);
+
+        let expected = [
+            "entity.csv",
+            "discogs_mapping.csv",
+            "influence.csv",
+            "genre.csv",
+            "record_label.csv",
+            "label_hierarchy.csv",
+            "entity_alias.csv",
+            "occupation.csv",
+        ];
+
+        for name in expected {
+            assert!(dir.path().join(name).exists(), "{name} should exist");
+        }
+
+        // Verify headers match current contract
+        let entity_csv = std::fs::read_to_string(dir.path().join("entity.csv")).unwrap();
+        let first_line = entity_csv.lines().next().unwrap();
+        assert_eq!(first_line, "qid,label,description,entity_type");
+
+        let mapping_csv = std::fs::read_to_string(dir.path().join("discogs_mapping.csv")).unwrap();
+        let first_line = mapping_csv.lines().next().unwrap();
+        assert_eq!(first_line, "qid,property,discogs_id");
     }
 }

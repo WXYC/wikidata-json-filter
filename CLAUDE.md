@@ -58,11 +58,18 @@ All code changes follow test-driven development. No production code without a fa
 ### Testing
 
 ```bash
-cargo test          # all tests (unit + CLI integration)
+cargo test          # all tests (unit + CLI + oracle + PG skipped without DB)
 cargo test --lib    # unit tests only
+
+# PostgreSQL integration tests (requires TEST_DATABASE_URL)
+TEST_DATABASE_URL=postgresql://musicbrainz:musicbrainz@localhost:5434/postgres \
+  cargo test --test pg_import_test
 ```
 
-Unit tests use hand-crafted JSON fixtures in each module. CLI integration tests use `tests/fixtures/small_dump.json` (5 entities: 3 music-relevant, 2 non-music).
+- **Unit tests** (26): JSON parsing, filter logic, extractor, CSV output, pipeline output trait.
+- **CLI tests** (4): End-to-end binary invocation with small_dump.json fixture.
+- **Oracle tests** (9): CSV output diffed against expected baselines in `tests/fixtures/expected/`.
+- **PG import tests** (13): Full filter -> CSV -> PG import -> query chain. Trigram search on entity names and aliases. Discogs/MusicBrainz ID lookup via indexes. Gated on `TEST_DATABASE_URL`.
 
 ### Build
 

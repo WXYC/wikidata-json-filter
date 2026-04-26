@@ -136,7 +136,7 @@ fn run_filter(
     input: OsString,
     output_dir: &Path,
     limit: u64,
-    _progress_interval: u64,
+    progress_interval: u64,
     gzip: bool,
 ) -> Result<()> {
     let start = Instant::now();
@@ -213,6 +213,10 @@ fn run_filter(
 
                 tx.send_item(json_bytes)?;
                 count += 1;
+
+                if progress_interval > 0 && count.is_multiple_of(progress_interval) {
+                    log::info!("Scanned {count} entities...");
+                }
 
                 if limit > 0 && count >= limit {
                     break;

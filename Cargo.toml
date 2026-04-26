@@ -16,7 +16,7 @@ csv = "1.3"
 anyhow = "1"
 log = "0.4"
 env_logger = "0.11"
-wxyc-etl = { path = "../3a-wxyc-etl-combined/wxyc-etl" }
+wxyc-etl = { path = "../wxyc-etl/wxyc-etl" }
 postgres = "0.19"
 
 [dev-dependencies]

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout wxyc-etl at expected relative path
+        run: git clone --depth 1 https://github.com/WXYC/wxyc-etl.git "$GITHUB_WORKSPACE/../wxyc-etl"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout wxyc-etl at expected relative path
+        run: git clone --depth 1 https://github.com/WXYC/wxyc-etl.git "$GITHUB_WORKSPACE/../wxyc-etl"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build tests
+        run: cargo build --tests
+      - name: Run unit + CLI + oracle tests (no DB)
+        run: cargo test --lib --bins --test cli_tests --test oracle_tests --test error_handling
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wikidata
+          POSTGRES_PASSWORD: wikidata
+          POSTGRES_DB: wikidata_test
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd "pg_isready -U wikidata"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout wxyc-etl at expected relative path
+        run: git clone --depth 1 https://github.com/WXYC/wxyc-etl.git "$GITHUB_WORKSPACE/../wxyc-etl"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run PostgreSQL integration tests
+        env:
+          TEST_DATABASE_URL: postgresql://wikidata:wikidata@localhost:5435/wikidata_test
+        run: cargo test --test import_test --test pg_import_test -- --test-threads=1

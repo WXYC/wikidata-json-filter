@@ -136,7 +136,7 @@ fn run_filter(
     input: OsString,
     output_dir: &Path,
     limit: u64,
-    progress_interval: u64,
+    _progress_interval: u64,
     gzip: bool,
 ) -> Result<()> {
     let start = Instant::now();

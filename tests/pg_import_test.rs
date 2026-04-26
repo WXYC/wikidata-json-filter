@@ -747,6 +747,108 @@ fn test_index_used_for_discogs_lookup() {
     assert!(!plan.is_empty(), "EXPLAIN should return a query plan");
 }
 
+/// Run `EXPLAIN <query>` (default text format) and join the lines into one
+/// string for substring assertions. Plain text format avoids needing the
+/// `postgres` crate's optional `with-serde_json-1` feature.
+fn explain_plan_text(client: &mut postgres::Client, query: &str) -> String {
+    let rows = client.query(&format!("EXPLAIN {}", query), &[]).unwrap();
+    rows.iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn test_explain_uses_index_for_discogs_lookup() {
+    let Some(admin_url) = test_db_url() else {
+        return;
+    };
+    let (_temp_db, mut client) = set_up_full_db(&admin_url);
+
+    // Insert ~500 synthetic discogs_mapping rows so the planner prefers the
+    // composite index over a sequential scan. Each synthetic row needs a parent
+    // entity row to satisfy the FK on discogs_mapping.qid.
+    client
+        .batch_execute(
+            "INSERT INTO entity (qid, label, description, entity_type)
+             SELECT 'Q9' || g::text, 'synthetic_' || g::text, '', 'group'
+             FROM generate_series(1, 500) g;
+             INSERT INTO discogs_mapping (qid, property, discogs_id)
+             SELECT 'Q9' || g::text, 'P1953', (1000000 + g)::text
+             FROM generate_series(1, 500) g;
+             REINDEX INDEX idx_discogs_mapping_property_id;
+             ANALYZE entity;
+             ANALYZE discogs_mapping;",
+        )
+        .unwrap();
+
+    let plan = explain_plan_text(
+        &mut client,
+        "SELECT qid FROM discogs_mapping \
+         WHERE property = 'P1953' AND discogs_id = '1000123'",
+    );
+
+    let uses_index = plan.contains("Index Scan")
+        || plan.contains("Bitmap Index Scan")
+        || plan.contains("Index Only Scan");
+    assert!(
+        uses_index,
+        "Expected EXPLAIN plan to include an index-scan node.\nPlan:\n{}",
+        plan
+    );
+
+    assert!(
+        plan.contains("idx_discogs_mapping_property_id"),
+        "Expected plan to reference idx_discogs_mapping_property_id.\nPlan:\n{}",
+        plan
+    );
+}
+
+#[test]
+fn test_explain_uses_trigram_index_for_label_search() {
+    let Some(admin_url) = test_db_url() else {
+        return;
+    };
+    let (_temp_db, mut client) = set_up_full_db(&admin_url);
+
+    // Insert ~20k entities with diverse synthetic labels so the GIN trigram
+    // index beats a sequential scan (GIN has noticeable startup cost, so the
+    // table has to be large enough that scanning it linearly is slower).
+    // Use md5() to vary trigrams across rows. After bulk insert we REINDEX so
+    // the GIN index is compact (incremental GIN inserts bloat the index, which
+    // inflates the planner's estimated cost and can defeat this assertion).
+    client
+        .batch_execute(
+            "INSERT INTO entity (qid, label, description, entity_type)
+             SELECT 'Q8' || g::text,
+                    'synth_' || md5(g::text) || '_band',
+                    '',
+                    'group'
+             FROM generate_series(1, 20000) g;
+             REINDEX INDEX idx_entity_label_trgm;
+             ANALYZE entity;",
+        )
+        .unwrap();
+
+    // Trigram similarity match against the seeded fixture name 'Autechre'. The
+    // % operator is what idx_entity_label_trgm (gin_trgm_ops) accelerates.
+    let plan = explain_plan_text(
+        &mut client,
+        "SELECT qid, label FROM entity WHERE label % 'autechre'",
+    );
+
+    assert!(
+        plan.contains("Bitmap Index Scan"),
+        "Expected a Bitmap Index Scan in the plan.\nPlan:\n{}",
+        plan
+    );
+    assert!(
+        plan.contains("idx_entity_label_trgm"),
+        "Expected the plan to reference idx_entity_label_trgm.\nPlan:\n{}",
+        plan
+    );
+}
+
 #[test]
 fn test_full_filter_csv_pg_query_chain() {
     let Some(admin_url) = test_db_url() else {

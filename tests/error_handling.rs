@@ -39,7 +39,9 @@ fn corrupted_gzip_returns_gracefully_not_panic() {
     // Stderr should contain the read error warning
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stderr.contains("read error") || stderr.contains("truncated stream") || stderr.contains("corrupt"),
+        stderr.contains("read error")
+            || stderr.contains("truncated stream")
+            || stderr.contains("corrupt"),
         "Expected warning about corrupted stream in stderr, got: {}",
         stderr
     );

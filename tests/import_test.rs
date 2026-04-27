@@ -557,8 +557,9 @@ fn test_end_to_end_pipeline() {
 
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg("tests/fixtures/small_dump.json")
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(csv_dir.path())
         .assert()
         .success();
@@ -653,7 +654,7 @@ fn test_import_subcommand() {
     Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("import")
-        .arg("--csv-dir")
+        .arg("--data-dir")
         .arg("tests/fixtures/import")
         .arg("--database-url")
         .arg(TEST_DB_URL)

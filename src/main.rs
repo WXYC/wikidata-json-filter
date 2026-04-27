@@ -14,6 +14,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use wxyc_etl::cli::{DatabaseArgs, ImportArgs, ResumableBuildArgs, resolve_database_url};
 use wxyc_etl::logger::{self, LoggerConfig};
 use wxyc_etl::pipeline::{self, BatchConfig};
 
@@ -24,57 +25,64 @@ use wikidata_cache::import_schema;
 use wikidata_cache::model::Entity;
 use wikidata_cache::writer::CsvOutput;
 
+const DATABASE_URL_ENV: &str = "DATABASE_URL_WIKIDATA";
+
 #[derive(Parser)]
 #[command(name = "wikidata-cache")]
-#[command(about = "Filter Wikidata JSON dumps to music-relevant entities")]
+#[command(
+    about = "Filter Wikidata JSON dumps to music-relevant entities and load them into PostgreSQL"
+)]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
-
-    /// Path to the Wikidata JSON dump (plain or .gz), or "-" for stdin
-    input: Option<OsString>,
-
-    /// Output directory for CSV files
-    #[arg(long, default_value = "output")]
-    output_dir: PathBuf,
-
-    /// Stop after processing N entities (0 = no limit)
-    #[arg(long, default_value = "0")]
-    limit: u64,
-
-    /// Log progress every N entities
-    #[arg(long, default_value = "1000000")]
-    progress_interval: u64,
-
-    /// Force gzip decompression (auto-detected for .gz files, required for stdin)
-    #[arg(long)]
-    gzip: bool,
+    command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Import CSV files into PostgreSQL
-    Import {
-        /// Directory containing the 8 CSV files produced by the filter
-        #[arg(long, default_value = "output")]
-        csv_dir: PathBuf,
+    /// Filter a Wikidata JSON dump and write 8 CSV files to the data directory.
+    Build {
+        /// Path to the Wikidata JSON dump (plain or .gz), or "-" for stdin.
+        input: OsString,
 
-        /// PostgreSQL connection string
-        #[arg(long, env = "DATABASE_URL")]
-        database_url: String,
+        #[command(flatten)]
+        build: ResumableBuildArgs,
 
-        /// Drop and recreate the schema before importing
+        /// Stop after processing N entities (0 = no limit).
+        #[arg(long, default_value = "0")]
+        limit: u64,
+
+        /// Log progress every N entities.
+        #[arg(long, default_value = "1000000")]
+        progress_interval: u64,
+
+        /// Force gzip decompression (auto-detected for .gz files, required for stdin).
         #[arg(long)]
-        fresh: bool,
+        gzip: bool,
+
+        /// Deprecated alias for `--data-dir`.
+        #[arg(long, hide = true)]
+        output_dir: Option<PathBuf>,
+    },
+    /// Import the 8 CSV files from the data directory into PostgreSQL via COPY.
+    Import {
+        #[command(flatten)]
+        db: DatabaseArgs,
+
+        #[command(flatten)]
+        import: ImportArgs,
+
+        /// Deprecated alias for `--data-dir`.
+        #[arg(long, hide = true)]
+        csv_dir: Option<PathBuf>,
     },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let (tool, step) = match cli.command {
-        Some(Commands::Import { .. }) => ("wikidata-cache import", "import"),
-        None => ("wikidata-cache build", "build"),
+    let (tool, step) = match &cli.command {
+        Commands::Build { .. } => ("wikidata-cache build", "build"),
+        Commands::Import { .. } => ("wikidata-cache import", "import"),
     };
     let _logger_guard = logger::init(LoggerConfig {
         repo: "wikidata-cache",
@@ -89,25 +97,40 @@ fn main() -> Result<()> {
     span.in_scope(|| {
         tracing::info!("starting");
         match cli.command {
-            Some(Commands::Import {
+            Commands::Build {
+                input,
+                build,
+                limit,
+                progress_interval,
+                gzip,
+                output_dir,
+            } => {
+                let data_dir = resolve_data_dir(build.data_dir, output_dir, "--output-dir");
+                run_filter(input, &data_dir, limit, progress_interval, gzip)
+            }
+            Commands::Import {
+                db,
+                import,
                 csv_dir,
-                database_url,
-                fresh,
-            }) => run_import(&csv_dir, &database_url, fresh),
-            None => {
-                let input = cli
-                    .input
-                    .ok_or_else(|| anyhow::anyhow!("Input file is required for filter mode. Use `import` subcommand for CSV-to-PostgreSQL import."))?;
-                run_filter(
-                    input,
-                    &cli.output_dir,
-                    cli.limit,
-                    cli.progress_interval,
-                    cli.gzip,
-                )
+            } => {
+                let data_dir = resolve_data_dir(import.data_dir, csv_dir, "--csv-dir");
+                let database_url = resolve_database_url(&db, DATABASE_URL_ENV)
+                    .context("Failed to resolve database URL")?;
+                run_import(&data_dir, &database_url, import.fresh)
             }
         }
     })
+}
+
+/// Resolve the working directory, honouring the deprecated alias if it was passed.
+fn resolve_data_dir(data_dir: PathBuf, deprecated: Option<PathBuf>, alias: &str) -> PathBuf {
+    if let Some(path) = deprecated {
+        eprintln!(
+            "warning: {alias} is deprecated and will be removed in a future release; use --data-dir instead"
+        );
+        return path;
+    }
+    data_dir
 }
 
 fn run_import(csv_dir: &Path, database_url: &str, fresh: bool) -> Result<()> {

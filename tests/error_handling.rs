@@ -29,8 +29,9 @@ fn corrupted_gzip_returns_gracefully_not_panic() {
     // The key assertion is that it does NOT panic or hang.
     let output = Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(corrupted_path.to_str().unwrap())
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .timeout(std::time::Duration::from_secs(10))
         .assert()
@@ -57,8 +58,9 @@ fn corrupted_gzip_produces_no_output_files_or_empty() {
 
     let _ = Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(corrupted_path.to_str().unwrap())
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .timeout(std::time::Duration::from_secs(10))
         .output();
@@ -94,8 +96,9 @@ fn malformed_json_entity_skipped_with_warning() {
 
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(dump_path.to_str().unwrap())
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .assert()
         .success();
@@ -131,8 +134,9 @@ fn empty_json_array_produces_empty_output() {
 
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(dump_path.to_str().unwrap())
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .assert()
         .success();
@@ -162,8 +166,9 @@ fn entity_with_missing_labels_field_skipped() {
 
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(dump_path.to_str().unwrap())
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .assert()
         .success();

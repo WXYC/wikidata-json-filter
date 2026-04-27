@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Purpose-built Rust tool that builds the WXYC `wikidata-cache` PostgreSQL database from Wikidata JSON dumps. Two subcommands: the default mode streams a (gzipped) Wikidata JSON dump and writes 8 CSV files of music-relevant entities; the `import` subcommand loads those CSVs into PostgreSQL. Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-converter) for Discogs data and [musicbrainz-cache](https://github.com/WXYC/musicbrainz-cache) for MusicBrainz.
+Purpose-built Rust tool that builds the WXYC `wikidata-cache` PostgreSQL database from Wikidata JSON dumps. Two subcommands matching the standardized WXYC cache-builder CLI shape (`wxyc_etl::cli`): `build` streams a (gzipped) Wikidata JSON dump and writes 8 CSV files of music-relevant entities to `--data-dir`; `import` loads those CSVs into PostgreSQL. Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-converter) for Discogs data and [musicbrainz-cache](https://github.com/WXYC/musicbrainz-cache) for MusicBrainz.
 
 ## Architecture
 
@@ -14,6 +14,7 @@ Purpose-built Rust tool that builds the WXYC `wikidata-cache` PostgreSQL databas
 - `writer.rs` -- `CsvOutput` wraps `wxyc_etl::csv_writer::MultiCsvWriter` for 8 CSV files with headers matching the wikidata-cache PostgreSQL schema. Implements `wxyc_etl::pipeline::PipelineOutput<ExtractedRows>`. The `csv_file_specs()` function defines the 8-file spec.
 - `import.rs` -- CSV import module. Reads the 8 CSV files and streams them into PostgreSQL via COPY TEXT. Handles RFC 4180 quoted fields, Unicode, and empty CSVs.
 - `import_schema.rs` -- PostgreSQL schema management. Embeds and applies `schema/create_database.sql`. Provides UNLOGGED/LOGGED toggle and VACUUM FULL for bulk import performance. Table constants define FK-safe import order.
+<<<<<<< HEAD
 - `main.rs` -- CLI (clap derive) with subcommand architecture. Default mode runs the three-stage filter pipeline via `wxyc_etl::pipeline`; `import` subcommand loads CSVs into PostgreSQL. Initializes `wxyc_etl::logger` (Sentry + JSON logs) at startup and wraps each subcommand in a tracing span tagged `repo`/`tool`/`step`.
 
 ### Observability
@@ -28,6 +29,9 @@ The binary uses `wxyc_etl::logger::init` to set up structured JSON logging on st
 | `run_id` | UUIDv4 generated per process |
 
 `SENTRY_DSN` is optional; without it, JSON logging still works and Sentry stays inactive. Provisioning the DSN in deploy environments (CI, Railway, etc.) is tracked separately.
+=======
+- `main.rs` -- CLI (clap derive) using shared argument groups from `wxyc_etl::cli` (`DatabaseArgs`, `ResumableBuildArgs`, `ImportArgs`). The `build` subcommand runs the three-stage filter pipeline via `wxyc_etl::pipeline`; the `import` subcommand loads CSVs into PostgreSQL. `--database-url` falls back to `DATABASE_URL_WIKIDATA` via `wxyc_etl::cli::resolve_database_url`. `--output-dir` (build) and `--csv-dir` (import) are accepted as deprecated aliases for `--data-dir` with a stderr warning.
+>>>>>>> 6cffa05 (Migrate CLI to standardized cache-builder shape)
 
 ### Parallel Processing Pipeline
 
@@ -54,9 +58,16 @@ The 8 output CSV files must be compatible with `wikidata-cache/scripts/import_cs
 | `entity_alias.csv` | qid, alias |
 | `occupation.csv` | entity_qid, occupation_qid |
 
-### Import Subcommand
+### Subcommands
 
-The `import` subcommand loads the 8 CSV files into PostgreSQL:
+The CLI matches the standard WXYC cache-builder shape:
+
+- **`wikidata-cache build INPUT [--data-dir DIR] [--limit N] [--progress-interval N] [--gzip] [--resume] [--state-file FILE]`** — streams the JSON dump and writes the 8 CSV files. `--resume`/`--state-file` come from `wxyc_etl::cli::ResumableBuildArgs`; the streaming filter is idempotent so they are accepted but currently no-ops.
+- **`wikidata-cache import [--data-dir DIR] [--database-url URL] [--fresh]`** — loads the 8 CSV files into PostgreSQL. The connection URL falls back to the `DATABASE_URL_WIKIDATA` env var via `wxyc_etl::cli::resolve_database_url`.
+
+`--output-dir` (build) and `--csv-dir` (import) are accepted for one release as deprecated aliases for `--data-dir` and emit a stderr warning.
+
+The `import` subcommand:
 
 1. Creates the schema (idempotent with `IF NOT EXISTS`)
 2. Sets tables to UNLOGGED for faster bulk import
@@ -101,7 +112,7 @@ TEST_DATABASE_URL=postgresql://musicbrainz:musicbrainz@localhost:5434/postgres \
 ```
 
 - **Unit tests** (26): JSON parsing, filter logic, extractor, CSV output, pipeline output trait.
-- **CLI tests** (4): End-to-end binary invocation with small_dump.json fixture.
+- **CLI tests** (9): End-to-end binary invocation with small_dump.json fixture, including env-var fallback for `DATABASE_URL_WIKIDATA` and deprecation warnings for renamed flags.
 - **Oracle tests** (9): CSV output diffed against expected baselines in `tests/fixtures/expected/`.
 - **PG import tests** (13): Full filter -> CSV -> PG import -> query chain. Trigram search on entity names and aliases. Discogs/MusicBrainz ID lookup via indexes. Gated on `TEST_DATABASE_URL`.
 - **Import integration tests**: Require PostgreSQL on port 5435 (started via `docker compose up -d`). Cover schema creation, CSV import for all 8 tables, FK integrity, Unicode handling, and end-to-end pipeline validation.

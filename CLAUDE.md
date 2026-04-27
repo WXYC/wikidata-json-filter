@@ -14,7 +14,20 @@ Purpose-built Rust tool that builds the WXYC `wikidata-cache` PostgreSQL databas
 - `writer.rs` -- `CsvOutput` wraps `wxyc_etl::csv_writer::MultiCsvWriter` for 8 CSV files with headers matching the wikidata-cache PostgreSQL schema. Implements `wxyc_etl::pipeline::PipelineOutput<ExtractedRows>`. The `csv_file_specs()` function defines the 8-file spec.
 - `import.rs` -- CSV import module. Reads the 8 CSV files and streams them into PostgreSQL via COPY TEXT. Handles RFC 4180 quoted fields, Unicode, and empty CSVs.
 - `import_schema.rs` -- PostgreSQL schema management. Embeds and applies `schema/create_database.sql`. Provides UNLOGGED/LOGGED toggle and VACUUM FULL for bulk import performance. Table constants define FK-safe import order.
-- `main.rs` -- CLI (clap derive) with subcommand architecture. Default mode runs the three-stage filter pipeline via `wxyc_etl::pipeline`; `import` subcommand loads CSVs into PostgreSQL.
+- `main.rs` -- CLI (clap derive) with subcommand architecture. Default mode runs the three-stage filter pipeline via `wxyc_etl::pipeline`; `import` subcommand loads CSVs into PostgreSQL. Initializes `wxyc_etl::logger` (Sentry + JSON logs) at startup and wraps each subcommand in a tracing span tagged `repo`/`tool`/`step`.
+
+### Observability
+
+The binary uses `wxyc_etl::logger::init` to set up structured JSON logging on stdout and (when `SENTRY_DSN` is set) panic/error forwarding to Sentry. Every log line and Sentry event carries the four standard ETL tags:
+
+| Tag | Value |
+|-----|-------|
+| `repo` | `wikidata-cache` |
+| `tool` | `wikidata-cache build` or `wikidata-cache import` |
+| `step` | `build` or `import` (the active subcommand) |
+| `run_id` | UUIDv4 generated per process |
+
+`SENTRY_DSN` is optional; without it, JSON logging still works and Sentry stays inactive. Provisioning the DSN in deploy environments (CI, Railway, etc.) is tracked separately.
 
 ### Parallel Processing Pipeline
 

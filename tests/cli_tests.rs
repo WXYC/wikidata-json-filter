@@ -101,3 +101,38 @@ fn missing_input_fails() {
         .assert()
         .failure();
 }
+
+#[test]
+fn entrypoint_emits_json_logs_with_repo_tag_and_no_sentry_dsn() {
+    // With SENTRY_DSN unset, the binary must still start, run to completion, and
+    // emit at least one JSON log line carrying the `repo: "wikidata-cache"` tag.
+    let output_dir = TempDir::new().unwrap();
+
+    let assert = Command::cargo_bin("wikidata-cache")
+        .unwrap()
+        .env_remove("SENTRY_DSN")
+        .env("RUST_LOG", "info")
+        .arg("tests/fixtures/small_dump.json")
+        .arg("--output-dir")
+        .arg(output_dir.path())
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+
+    let json_line_with_repo = stdout.lines().find(|line| {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with('{') {
+            return false;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            return false;
+        };
+        value.to_string().contains("\"repo\":\"wikidata-cache\"")
+    });
+
+    assert!(
+        json_line_with_repo.is_some(),
+        "expected a JSON log line tagged repo=wikidata-cache; stdout was:\n{stdout}"
+    );
+}

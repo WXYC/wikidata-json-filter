@@ -14,6 +14,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use wxyc_etl::logger::{self, LoggerConfig};
 use wxyc_etl::pipeline::{self, BatchConfig};
 
 use wikidata_cache::extractor::extract;
@@ -69,28 +70,44 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
     let cli = Cli::parse();
 
-    match cli.command {
-        Some(Commands::Import {
-            csv_dir,
-            database_url,
-            fresh,
-        }) => run_import(&csv_dir, &database_url, fresh),
-        None => {
-            let input = cli
-                .input
-                .ok_or_else(|| anyhow::anyhow!("Input file is required for filter mode. Use `import` subcommand for CSV-to-PostgreSQL import."))?;
-            run_filter(
-                input,
-                &cli.output_dir,
-                cli.limit,
-                cli.progress_interval,
-                cli.gzip,
-            )
+    let (tool, step) = match cli.command {
+        Some(Commands::Import { .. }) => ("wikidata-cache import", "import"),
+        None => ("wikidata-cache build", "build"),
+    };
+    let _logger_guard = logger::init(LoggerConfig {
+        repo: "wikidata-cache",
+        tool,
+        sentry_dsn: None,
+        run_id: None,
+    });
+
+    // TODO: provision SENTRY_DSN in the runtime env (CI / deploy config) — see issue #13.
+
+    let span = tracing::info_span!("run", repo = "wikidata-cache", tool = tool, step = step,);
+    span.in_scope(|| {
+        tracing::info!("starting");
+        match cli.command {
+            Some(Commands::Import {
+                csv_dir,
+                database_url,
+                fresh,
+            }) => run_import(&csv_dir, &database_url, fresh),
+            None => {
+                let input = cli
+                    .input
+                    .ok_or_else(|| anyhow::anyhow!("Input file is required for filter mode. Use `import` subcommand for CSV-to-PostgreSQL import."))?;
+                run_filter(
+                    input,
+                    &cli.output_dir,
+                    cli.limit,
+                    cli.progress_interval,
+                    cli.gzip,
+                )
+            }
         }
-    }
+    })
 }
 
 fn run_import(csv_dir: &Path, database_url: &str, fresh: bool) -> Result<()> {

@@ -92,6 +92,12 @@ An entity is music-relevant if it has ANY primary indicator (each sufficient on 
 
 Secondary properties (P737 influence, P136 genre, P264 record label, P749 parent org, P2850 Apple Music artist ID, P3283 Bandcamp profile ID) are extracted only from entities that pass the primary filter. They don't independently qualify an entity.
 
+## Scheduling
+
+The full rebuild (`build` then `import --fresh`) is scheduled via `.github/workflows/rebuild-cache.yml`, which fires at 06:00 UTC on the 10th of each month and also exposes a `workflow_dispatch` trigger for ad-hoc runs (with an optional `dump_url` input). The workflow expects a `DATABASE_URL_WIKIDATA` repository secret pointing at the destination cache. The 10th-of-the-month cron is staggered against the sister cache rebuilds (`discogs-etl`, `musicbrainz-cache`) so no two multi-hour rebuilds co-run.
+
+**Runner-capacity caveat:** the Wikidata JSON dump is roughly 130GB gzipped and a full rebuild can take many hours. GitHub-hosted `ubuntu-latest` runners have a 6-hour job timeout and only ~14GB of free disk, so the scheduled run will likely fail on disk or timeout. The workflow is intentionally a scheduling skeleton — the actual rebuild needs to migrate to a self-hosted runner, a Railway job, or a dedicated EC2 box. Until then, treat the `workflow_dispatch` trigger as the supported path (e.g., for small-dump smoke tests) and run real rebuilds out-of-band.
+
 ## Development
 
 ### TDD (Required)

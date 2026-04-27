@@ -1,0 +1,61 @@
+name: Rebuild wikidata-cache
+
+# Monthly full rebuild of the wikidata-cache PostgreSQL database from a
+# Wikidata JSON dump. Runs `wikidata-cache build` (filter dump -> 8 CSVs) then
+# `wikidata-cache import --fresh` (drop + reload schema + COPY CSVs).
+#
+# Sister cache rebuild schedules (stagger to avoid co-running multi-hour jobs):
+#   - discogs-etl:        TBD (1st-ish)
+#   - musicbrainz-cache:  TBD (5th-ish)
+#   - wikidata-cache:     10th of the month (this workflow)
+#
+# TODO(runner-capacity): The Wikidata JSON dump is ~130GB gzipped and the full
+# build + import can run for many hours. GitHub-hosted `ubuntu-latest` runners
+# have a 6-hour job timeout and ~14GB free disk. This workflow is a scheduling
+# skeleton; the actual rebuild likely needs to move to a self-hosted runner, a
+# Railway job, or a dedicated EC2 box. Until then, expect scheduled runs to
+# fail on disk or timeout — operators should kick rebuilds manually elsewhere
+# and use this workflow's `workflow_dispatch` for small-dump smoke tests.
+
+on:
+  schedule:
+    # 06:00 UTC on the 10th of each month (offset from sister cache rebuilds)
+    - cron: "0 6 10 * *"
+  workflow_dispatch:
+    inputs:
+      dump_url:
+        description: "Wikidata dump URL (default: latest-all.json.gz)"
+        required: false
+        default: "https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.json.gz"
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    # TODO(runner-capacity): see top-of-file note. 360 minutes is the max for
+    # GitHub-hosted runners; real rebuilds will exceed this.
+    timeout-minutes: 350
+    env:
+      DUMP_URL: ${{ inputs.dump_url || 'https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.json.gz' }}
+      DATA_DIR: ${{ github.workspace }}/data
+      DATABASE_URL_WIKIDATA: ${{ secrets.DATABASE_URL_WIKIDATA }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout wxyc-etl at expected relative path
+        run: git clone --depth 1 https://github.com/WXYC/wxyc-etl.git "$GITHUB_WORKSPACE/../wxyc-etl"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Prepare data directory
+        run: mkdir -p "$DATA_DIR"
+
+      - name: Build CSVs from Wikidata dump
+        # Stream the dump via stdin so we don't need disk space for the
+        # ~130GB gzipped file in addition to the CSV output.
+        run: curl -fsSL "$DUMP_URL" | ./target/release/wikidata-cache build - --data-dir "$DATA_DIR" --gzip
+
+      - name: Import CSVs into PostgreSQL
+        run: ./target/release/wikidata-cache import --data-dir "$DATA_DIR" --fresh

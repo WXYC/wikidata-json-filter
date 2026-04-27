@@ -177,8 +177,9 @@ fn test_csv_imports_into_pg() {
     let output_dir = tempfile::tempdir().unwrap();
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(fixture_path("small_dump.json"))
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .assert()
         .success();
@@ -349,8 +350,9 @@ fn test_all_eight_tables_populated_or_empty() {
     let output_dir = tempfile::tempdir().unwrap();
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(fixture_path("small_dump.json"))
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .assert()
         .success();
@@ -456,8 +458,9 @@ fn set_up_full_db(admin_url: &str) -> (TempDb, postgres::Client) {
     let output_dir = tempfile::tempdir().unwrap();
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(fixture_path("small_dump.json"))
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(output_dir.path())
         .assert()
         .success();

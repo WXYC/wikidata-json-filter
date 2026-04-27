@@ -6,26 +6,32 @@ Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-convert
 
 ## Usage
 
+`wikidata-cache` exposes the standard WXYC cache-builder CLI shape: a `build` subcommand that produces the cache (CSV files), and an `import` subcommand that loads them into PostgreSQL.
+
 ```bash
 # Filter the full Wikidata dump (~130GB gzipped, ~3 hours)
-wikidata-cache latest-all.json.gz --output-dir /path/to/csv/
+wikidata-cache build latest-all.json.gz --data-dir /path/to/csv/
 
 # Limit entities for testing
-wikidata-cache latest-all.json.gz --output-dir /tmp/test/ --limit 1000
+wikidata-cache build latest-all.json.gz --data-dir /tmp/test/ --limit 1000
 
 # Adjust progress logging interval
-wikidata-cache latest-all.json.gz --output-dir /path/to/csv/ --progress-interval 500000
+wikidata-cache build latest-all.json.gz --data-dir /path/to/csv/ --progress-interval 500000
 ```
 
 Gzipped input is auto-detected by `.gz` extension.
 
-### Options
+### `build` options
 
 | Flag | Description |
 |------|-------------|
-| `--output-dir DIR` | Output directory for CSV files (default: `output`) |
+| `--data-dir DIR` | Working directory for CSV files (default: `./data`) |
 | `--limit N` | Stop after N entities, 0 = no limit (default: 0) |
 | `--progress-interval N` | Log progress every N entities (default: 1000000) |
+| `--gzip` | Force gzip decompression (auto-detected for `.gz` files) |
+| `--resume`, `--state-file FILE` | Standard cache-builder flags (currently no-ops; the streaming filter is idempotent) |
+
+`--output-dir` is accepted as a deprecated alias for `--data-dir`; passing it prints a stderr warning. The alias will be removed in a future release.
 
 ## What gets filtered
 
@@ -61,15 +67,17 @@ The `import` subcommand loads the CSV output directly into PostgreSQL:
 
 ```bash
 # Import CSVs into PostgreSQL (creates schema, imports data, runs VACUUM)
-wikidata-cache import --csv-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata'
+wikidata-cache import --data-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata'
 
-# Or use DATABASE_URL environment variable
-export DATABASE_URL='host=localhost dbname=wikidata user=wikidata password=wikidata'
-wikidata-cache import --csv-dir /path/to/csv/
+# Or use the DATABASE_URL_WIKIDATA environment variable
+export DATABASE_URL_WIKIDATA='host=localhost dbname=wikidata user=wikidata password=wikidata'
+wikidata-cache import --data-dir /path/to/csv/
 
 # Drop and recreate schema before importing
-wikidata-cache import --csv-dir /path/to/csv/ --database-url '...' --fresh
+wikidata-cache import --data-dir /path/to/csv/ --database-url '...' --fresh
 ```
+
+`--csv-dir` is accepted as a deprecated alias for `--data-dir` and will be removed in a future release.
 
 The import:
 1. Creates the schema (idempotent with `IF NOT EXISTS`)
@@ -125,10 +133,10 @@ Unit and CLI tests use hand-written JSON fixtures; no external data dumps needed
 wget https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.json.gz
 
 # 2. Filter to music entities
-wikidata-cache latest-all.json.gz --output-dir /path/to/csv/
+wikidata-cache build latest-all.json.gz --data-dir /path/to/csv/
 
 # 3. Load into PostgreSQL
-wikidata-cache import --csv-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata' --fresh
+wikidata-cache import --data-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata' --fresh
 ```
 
 ## Data source

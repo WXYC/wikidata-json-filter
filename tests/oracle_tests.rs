@@ -59,8 +59,9 @@ fn generate_output() -> tempfile::TempDir {
 
     Command::cargo_bin("wikidata-cache")
         .unwrap()
+        .arg("build")
         .arg(input)
-        .arg("--output-dir")
+        .arg("--data-dir")
         .arg(dir.path())
         .assert()
         .success();

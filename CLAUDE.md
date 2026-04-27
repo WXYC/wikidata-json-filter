@@ -98,6 +98,31 @@ The full rebuild (`build` then `import --fresh`) is scheduled via `.github/workf
 
 **Runner-capacity caveat:** the Wikidata JSON dump is roughly 130GB gzipped and a full rebuild can take many hours. GitHub-hosted `ubuntu-latest` runners have a 6-hour job timeout and only ~14GB of free disk, so the scheduled run will likely fail on disk or timeout. The workflow is intentionally a scheduling skeleton — the actual rebuild needs to migrate to a self-hosted runner, a Railway job, or a dedicated EC2 box. Until then, treat the `workflow_dispatch` trigger as the supported path (e.g., for small-dump smoke tests) and run real rebuilds out-of-band.
 
+## Migrations
+
+Schema changes ship as numbered SQL files under `migrations/`, applied with [sqlx-cli](https://crates.io/crates/sqlx-cli). The baseline `migrations/0001_initial.sql` mirrors `schema/create_database.sql`.
+
+Install sqlx-cli once:
+
+```bash
+cargo install sqlx-cli --no-default-features --features postgres
+```
+
+Add a new migration:
+
+```bash
+sqlx migrate add <descriptive_name>
+# edits a new migrations/000N_<descriptive_name>.sql; write forward-only SQL
+```
+
+Apply against a database (e.g., a fresh local Postgres):
+
+```bash
+sqlx migrate run --database-url postgresql://localhost:5435/<db> --source migrations
+```
+
+**Runtime path is unchanged.** `src/import_schema.rs::apply_schema()` still reads `schema/create_database.sql` on every fresh import; `sqlx migrate run` is not yet wired into the CLI or the deploy pipeline. Switching the runtime over and stamping production with the baseline version is tracked in [WXYC/wxyc-etl#56](https://github.com/WXYC/wxyc-etl/issues/56). Until that lands, keep `schema/create_database.sql` and `migrations/0001_initial.sql` in sync — any schema change should land in both files in the same PR.
+
 ## Development
 
 ### TDD (Required)

@@ -57,7 +57,7 @@ fn generate_output() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let input = fixture_path("small_dump.json");
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(input)
         .arg("--output-dir")

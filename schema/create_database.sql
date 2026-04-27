@@ -1,6 +1,6 @@
 -- wikidata-cache PostgreSQL schema
--- Creates tables for music-relevant Wikidata entities extracted by wikidata-json-filter.
--- Compatible with the 8 CSV files produced by wikidata-json-filter's writer module.
+-- Creates tables for music-relevant Wikidata entities extracted by wikidata-cache.
+-- Compatible with the 8 CSV files produced by wikidata-cache's writer module.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 

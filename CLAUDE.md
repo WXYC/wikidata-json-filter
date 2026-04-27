@@ -1,8 +1,8 @@
-# Claude Code Instructions for wikidata-json-filter
+# Claude Code Instructions for wikidata-cache
 
 ## Project Overview
 
-Purpose-built Rust tool for filtering Wikidata JSON data dumps to music-relevant entities, producing CSV files compatible with the [wikidata-cache](https://github.com/WXYC/wikidata-cache) ETL pipeline. Also provides an `import` subcommand to load those CSVs into PostgreSQL, creating the wikidata-cache database. Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-converter) for Discogs data.
+Purpose-built Rust tool that builds the WXYC `wikidata-cache` PostgreSQL database from Wikidata JSON dumps. Two subcommands: the default mode streams a (gzipped) Wikidata JSON dump and writes 8 CSV files of music-relevant entities; the `import` subcommand loads those CSVs into PostgreSQL. Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-converter) for Discogs data and [musicbrainz-cache](https://github.com/WXYC/musicbrainz-cache) for MusicBrainz.
 
 ## Architecture
 
@@ -96,7 +96,7 @@ TEST_DATABASE_URL=postgresql://musicbrainz:musicbrainz@localhost:5434/postgres \
 ### Build
 
 ```bash
-cargo build --release   # produces target/release/wikidata-json-filter
+cargo build --release   # produces target/release/wikidata-cache
 cargo install --path .  # installs to ~/.cargo/bin/
 ```
 

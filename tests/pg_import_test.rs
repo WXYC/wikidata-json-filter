@@ -1,4 +1,4 @@
-//! PostgreSQL import integration tests for wikidata-json-filter.
+//! PostgreSQL import integration tests for wikidata-cache.
 //!
 //! Verifies the full filter -> CSV -> PG import -> query chain:
 //! 1. Filter small_dump.json through the binary, producing CSVs
@@ -175,7 +175,7 @@ fn test_csv_imports_into_pg() {
 
     // Step 1: Generate CSVs from fixture
     let output_dir = tempfile::tempdir().unwrap();
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(fixture_path("small_dump.json"))
         .arg("--output-dir")
@@ -347,7 +347,7 @@ fn test_all_eight_tables_populated_or_empty() {
     let temp_db = TempDb::new(&admin_url);
 
     let output_dir = tempfile::tempdir().unwrap();
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(fixture_path("small_dump.json"))
         .arg("--output-dir")
@@ -454,7 +454,7 @@ fn set_up_full_db(admin_url: &str) -> (TempDb, postgres::Client) {
     let temp_db = TempDb::new(admin_url);
 
     let output_dir = tempfile::tempdir().unwrap();
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(fixture_path("small_dump.json"))
         .arg("--output-dir")

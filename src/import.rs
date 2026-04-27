@@ -1,4 +1,4 @@
-//! CSV import module: reads the 8 CSV files produced by wikidata-json-filter
+//! CSV import module: reads the 8 CSV files produced by wikidata-cache
 //! and streams them into PostgreSQL via COPY.
 
 use anyhow::{Context, Result};

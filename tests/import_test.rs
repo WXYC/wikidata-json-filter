@@ -10,8 +10,8 @@ use assert_cmd::Command;
 use postgres::{Client, NoTls};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
-use wikidata_json_filter::import;
-use wikidata_json_filter::import_schema;
+use wikidata_cache::import;
+use wikidata_cache::import_schema;
 
 const TEST_DB_URL: &str =
     "host=localhost port=5435 user=wikidata password=wikidata dbname=wikidata_test";
@@ -552,10 +552,10 @@ fn test_vacuum_after_import() {
 fn test_end_to_end_pipeline() {
     let _lock = lock_db();
 
-    // Step 1: Run wikidata-json-filter on the small JSON dump to produce CSVs
+    // Step 1: Run wikidata-cache on the small JSON dump to produce CSVs
     let csv_dir = tempfile::TempDir::new().unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("tests/fixtures/small_dump.json")
         .arg("--output-dir")
@@ -650,7 +650,7 @@ fn test_import_subcommand() {
     import_schema::drop_schema(&mut client).unwrap();
     drop(client);
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("import")
         .arg("--csv-dir")

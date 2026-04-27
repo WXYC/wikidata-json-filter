@@ -1,4 +1,4 @@
-//! Error handling tests for wikidata-json-filter.
+//! Error handling tests for wikidata-cache.
 //!
 //! Verifies graceful behavior on corrupted gzip input and malformed JSON entities.
 
@@ -27,7 +27,7 @@ fn corrupted_gzip_returns_gracefully_not_panic() {
     // The binary should handle corrupted gzip gracefully -- it prints a warning
     // about the truncated stream and exits with success (0 entities processed).
     // The key assertion is that it does NOT panic or hang.
-    let output = Command::cargo_bin("wikidata-json-filter")
+    let output = Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(corrupted_path.to_str().unwrap())
         .arg("--output-dir")
@@ -55,7 +55,7 @@ fn corrupted_gzip_produces_no_output_files_or_empty() {
     let corrupted_path = input_dir.path().join("bad.json.gz");
     create_corrupted_gzip(&corrupted_path);
 
-    let _ = Command::cargo_bin("wikidata-json-filter")
+    let _ = Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(corrupted_path.to_str().unwrap())
         .arg("--output-dir")
@@ -92,7 +92,7 @@ fn malformed_json_entity_skipped_with_warning() {
     let dump_path = input_dir.path().join("malformed.json");
     fs::write(&dump_path, dump).unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(dump_path.to_str().unwrap())
         .arg("--output-dir")
@@ -129,7 +129,7 @@ fn empty_json_array_produces_empty_output() {
     let dump_path = input_dir.path().join("empty.json");
     fs::write(&dump_path, "[\n]\n").unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(dump_path.to_str().unwrap())
         .arg("--output-dir")
@@ -160,7 +160,7 @@ fn entity_with_missing_labels_field_skipped() {
     let dump_path = input_dir.path().join("missing_labels.json");
     fs::write(&dump_path, dump).unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg(dump_path.to_str().unwrap())
         .arg("--output-dir")

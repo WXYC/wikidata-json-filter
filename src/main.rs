@@ -16,15 +16,15 @@ use std::time::Instant;
 
 use wxyc_etl::pipeline::{self, BatchConfig};
 
-use wikidata_json_filter::extractor::extract;
-use wikidata_json_filter::filter::is_music_relevant;
-use wikidata_json_filter::import;
-use wikidata_json_filter::import_schema;
-use wikidata_json_filter::model::Entity;
-use wikidata_json_filter::writer::CsvOutput;
+use wikidata_cache::extractor::extract;
+use wikidata_cache::filter::is_music_relevant;
+use wikidata_cache::import;
+use wikidata_cache::import_schema;
+use wikidata_cache::model::Entity;
+use wikidata_cache::writer::CsvOutput;
 
 #[derive(Parser)]
-#[command(name = "wikidata-json-filter")]
+#[command(name = "wikidata-cache")]
 #[command(about = "Filter Wikidata JSON dumps to music-relevant entities")]
 struct Cli {
     #[command(subcommand)]

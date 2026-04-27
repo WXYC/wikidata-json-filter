@@ -6,7 +6,7 @@ use tempfile::TempDir;
 fn filters_small_dump() {
     let output_dir = TempDir::new().unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("tests/fixtures/small_dump.json")
         .arg("--output-dir")
@@ -51,7 +51,7 @@ fn filters_small_dump() {
 fn limit_flag_stops_early() {
     let output_dir = TempDir::new().unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("tests/fixtures/small_dump.json")
         .arg("--output-dir")
@@ -75,7 +75,7 @@ fn stdin_piping() {
     let output_dir = TempDir::new().unwrap();
     let input = fs::read("tests/fixtures/small_dump.json").unwrap();
 
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("-")
         .arg("--output-dir")
@@ -95,7 +95,7 @@ fn stdin_piping() {
 
 #[test]
 fn missing_input_fails() {
-    Command::cargo_bin("wikidata-json-filter")
+    Command::cargo_bin("wikidata-cache")
         .unwrap()
         .arg("nonexistent.json")
         .assert()

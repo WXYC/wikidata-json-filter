@@ -1,8 +1,8 @@
 [package]
-name = "wikidata-json-filter"
+name = "wikidata-cache"
 version = "0.1.0"
 edition = "2024"
-description = "Streaming filter for Wikidata JSON dumps — extracts music-relevant entities to CSV"
+description = "Streaming filter for Wikidata JSON dumps + PostgreSQL cache builder for music-relevant entities"
 license = "MIT"
 
 [dependencies]

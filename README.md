@@ -1,4 +1,4 @@
-# wikidata-json-filter
+# wikidata-cache
 
 Streaming Rust filter for [Wikidata JSON data dumps](https://www.wikidata.org/wiki/Wikidata:Database_download). Extracts music-relevant entities (artists, bands, record labels) and writes flat CSV files, then loads them into PostgreSQL to create the wikidata-cache database.
 
@@ -8,13 +8,13 @@ Analogous to [discogs-xml-converter](https://github.com/WXYC/discogs-xml-convert
 
 ```bash
 # Filter the full Wikidata dump (~130GB gzipped, ~3 hours)
-wikidata-json-filter latest-all.json.gz --output-dir /path/to/csv/
+wikidata-cache latest-all.json.gz --output-dir /path/to/csv/
 
 # Limit entities for testing
-wikidata-json-filter latest-all.json.gz --output-dir /tmp/test/ --limit 1000
+wikidata-cache latest-all.json.gz --output-dir /tmp/test/ --limit 1000
 
 # Adjust progress logging interval
-wikidata-json-filter latest-all.json.gz --output-dir /path/to/csv/ --progress-interval 500000
+wikidata-cache latest-all.json.gz --output-dir /path/to/csv/ --progress-interval 500000
 ```
 
 Gzipped input is auto-detected by `.gz` extension.
@@ -61,14 +61,14 @@ The `import` subcommand loads the CSV output directly into PostgreSQL:
 
 ```bash
 # Import CSVs into PostgreSQL (creates schema, imports data, runs VACUUM)
-wikidata-json-filter import --csv-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata'
+wikidata-cache import --csv-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata'
 
 # Or use DATABASE_URL environment variable
 export DATABASE_URL='host=localhost dbname=wikidata user=wikidata password=wikidata'
-wikidata-json-filter import --csv-dir /path/to/csv/
+wikidata-cache import --csv-dir /path/to/csv/
 
 # Drop and recreate schema before importing
-wikidata-json-filter import --csv-dir /path/to/csv/ --database-url '...' --fresh
+wikidata-cache import --csv-dir /path/to/csv/ --database-url '...' --fresh
 ```
 
 The import:
@@ -125,10 +125,10 @@ Unit and CLI tests use hand-written JSON fixtures; no external data dumps needed
 wget https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.json.gz
 
 # 2. Filter to music entities
-wikidata-json-filter latest-all.json.gz --output-dir /path/to/csv/
+wikidata-cache latest-all.json.gz --output-dir /path/to/csv/
 
 # 3. Load into PostgreSQL
-wikidata-json-filter import --csv-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata' --fresh
+wikidata-cache import --csv-dir /path/to/csv/ --database-url 'host=localhost dbname=wikidata user=wikidata password=wikidata' --fresh
 ```
 
 ## Data source

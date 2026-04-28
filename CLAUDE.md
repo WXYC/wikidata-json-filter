@@ -121,7 +121,11 @@ Apply against a database (e.g., a fresh local Postgres):
 sqlx migrate run --database-url postgresql://localhost:5435/<db> --source migrations
 ```
 
-**Runtime path is unchanged.** `src/import_schema.rs::apply_schema()` still reads `schema/create_database.sql` on every fresh import; `sqlx migrate run` is not yet wired into the CLI or the deploy pipeline. Switching the runtime over and stamping production with the baseline version is tracked in [WXYC/wxyc-etl#56](https://github.com/WXYC/wxyc-etl/issues/56). Until that lands, keep `schema/create_database.sql` and `migrations/0001_initial.sql` in sync — any schema change should land in both files in the same PR.
+**Deploy wiring**: `sqlx migrate run` is invoked by `.github/workflows/rebuild-cache.yml` before every monthly rebuild. Every migration in `migrations/` must be idempotent (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) — re-applying against a populated prod DB is required to be a no-op so the rebuild cron stays safe.
+
+**Dual-write convention**: when adding a schema change, write the new `migrations/000N_*.sql` AND mirror it into `schema/create_database.sql` so fresh-rebuild parity holds. The two paths must produce the same end-state.
+
+The `src/import_schema.rs::apply_schema()` runtime path remains the source of truth for fresh-rebuild DDL; `sqlx migrate run` is the source of truth for incremental schema evolution between rebuilds.
 
 ## Development
 

@@ -46,6 +46,20 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
+      # Apply pending sqlx migrations against the prod cache before rebuild.
+      # `migrations/0001_initial.sql` (and any future migrations) is idempotent
+      # (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`), so
+      # re-applying against a populated DB is a no-op other than populating the
+      # `_sqlx_migrations` history table. New migrations added between rebuilds
+      # get picked up here so incremental schema changes don't require a full
+      # reimport.
+      - name: Install sqlx-cli
+        run: cargo install --quiet --version 0.8 sqlx-cli --no-default-features --features postgres
+      - name: Apply pending migrations
+        run: sqlx migrate run --source migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_WIKIDATA }}
+
       - name: Prepare data directory
         run: mkdir -p "$DATA_DIR"
 

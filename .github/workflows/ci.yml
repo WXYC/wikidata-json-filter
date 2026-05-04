@@ -49,4 +49,4 @@ jobs:
       - name: Run PostgreSQL integration tests
         env:
           TEST_DATABASE_URL: postgresql://wikidata:wikidata@localhost:5435/wikidata_test
-        run: cargo test --test import_test --test pg_import_test -- --test-threads=1
+        run: cargo test --test import_test --test pg_import_test --test charset_torture -- --test-threads=1 --include-ignored

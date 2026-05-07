@@ -90,8 +90,8 @@ fn corpus_csv_pg_roundtrip() {
     let tmp = tempfile::tempdir().expect("tempdir");
 
     // Build entity.csv with one row per corpus entry. NUL (U+0000) is
-    // carried through the CSV layer; the PG COPY layer strips it per
-    // the WX-3.B boundary policy (WXYC/docs#18).
+    // carried through the CSV layer; `escape_copy_text` strips it before
+    // the bytes reach PostgreSQL, per WX-3.B (WXYC/docs#18).
     let mut entity_csv = String::from("qid,label,description,entity_type\n");
     let mut written: Vec<(usize, &str)> = Vec::new();
     for (id, _, input, _) in &entries {

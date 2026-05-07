@@ -50,6 +50,11 @@ const TABLE_DEFS: &[(&str, &str, &[&str])] = &[
 /// per the org-wide WX-3.B policy (WXYC/docs#18) we strip it at every
 /// PG TEXT write boundary. NUL in artist/title metadata is always a
 /// corruption signal, never intentional.
+///
+/// **Caller note**: this function is destructive and intended for the PG
+/// COPY TEXT pipeline only. Do not reuse for human-readable output, log
+/// formatting, or any context where NUL bytes would be useful diagnostic
+/// signal — they're silently swallowed here.
 fn escape_copy_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -121,4 +126,38 @@ pub fn import_all(client: &mut Client, csv_dir: &Path) -> Result<u64> {
         total += count;
     }
     Ok(total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_copy_text_handles_clean_input() {
+        assert_eq!(escape_copy_text("Stereolab"), "Stereolab");
+    }
+
+    #[test]
+    fn escape_copy_text_drops_nul() {
+        assert_eq!(escape_copy_text("a\0b"), "ab");
+        assert_eq!(escape_copy_text("\0a\0b\0"), "ab");
+    }
+
+    #[test]
+    fn escape_copy_text_escapes_backslash_tab_newline_cr() {
+        assert_eq!(escape_copy_text("a\\b\tc\nd\re"), "a\\\\b\\tc\\nd\\re");
+    }
+
+    #[test]
+    fn escape_copy_text_drops_nul_alongside_other_escapes() {
+        assert_eq!(escape_copy_text("a\0b\tc\0"), "ab\\tc");
+    }
+
+    #[test]
+    fn escape_copy_text_idempotent_on_strip() {
+        let once = escape_copy_text("a\0b\0c");
+        let twice = escape_copy_text(&once);
+        assert_eq!(once, "abc");
+        assert_eq!(twice, "abc");
+    }
 }

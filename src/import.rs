@@ -44,11 +44,17 @@ const TABLE_DEFS: &[(&str, &str, &[&str])] = &[
 ];
 
 /// Escape a string value for PostgreSQL COPY TEXT format.
-/// Handles backslash, tab, newline, and carriage return.
+///
+/// Handles backslash, tab, newline, and carriage return. Drops U+0000
+/// (NUL) silently — PostgreSQL TEXT cannot store it (SQL standard), and
+/// per the org-wide WX-3.B policy (WXYC/docs#18) we strip it at every
+/// PG TEXT write boundary. NUL in artist/title metadata is always a
+/// corruption signal, never intentional.
 fn escape_copy_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
+            '\0' => {} // strip at boundary (WXYC/docs#18)
             '\\' => out.push_str("\\\\"),
             '\t' => out.push_str("\\t"),
             '\n' => out.push_str("\\n"),

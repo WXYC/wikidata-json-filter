@@ -8,8 +8,10 @@
 
 use assert_cmd::Command;
 use postgres::{Client, NoTls};
+use rusqlite::Connection as SqliteConnection;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
+use tempfile::TempDir;
 use wikidata_cache::import;
 use wikidata_cache::import_schema;
 
@@ -668,6 +670,84 @@ fn test_import_subcommand() {
         .unwrap()
         .get(0);
     assert_eq!(count, 5, "Import subcommand should load 5 entities");
+}
+
+/// CLI integration test for the `import-wxyc-library` subcommand.
+///
+/// Pattern parity with `test_import_subcommand` for the CSV `import` path —
+/// every subcommand should have at least one end-to-end binary invocation
+/// in this file. Validates `--library-db` / `--database-url` / `--snapshot-source`
+/// wiring AND the through-line from CLI parse -> `run_import_wxyc_library` ->
+/// `populate_wxyc_library_v2` -> PostgreSQL row.
+#[test]
+fn test_import_wxyc_library_subcommand() {
+    let _lock = lock_db();
+
+    // Ensure the schema exists (the subcommand expects wxyc_library to be present).
+    let mut client = test_client();
+    fresh_schema(&mut client);
+    drop(client);
+
+    // Build a tiny library.db fixture in a temp dir.
+    let tmp = TempDir::new().unwrap();
+    let library_db_path = tmp.path().join("library.db");
+    let conn = SqliteConnection::open(&library_db_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE library (\
+            id INTEGER PRIMARY KEY, \
+            artist TEXT NOT NULL, \
+            title TEXT NOT NULL, \
+            label TEXT, \
+            format TEXT\
+        );\
+        INSERT INTO library (id, artist, title, label, format) VALUES \
+            (101, 'Juana Molina', 'DOGA', 'Sonamos', 'LP'), \
+            (102, 'Stereolab', 'Aluminum Tunes', 'Duophonic', 'CD');",
+    )
+    .unwrap();
+    drop(conn);
+
+    Command::cargo_bin("wikidata-cache")
+        .unwrap()
+        .arg("import-wxyc-library")
+        .arg("--library-db")
+        .arg(&library_db_path)
+        .arg("--database-url")
+        .arg(TEST_DB_URL)
+        .arg("--snapshot-source")
+        .arg("backend")
+        .assert()
+        .success();
+
+    let mut client = test_client();
+    let count: i64 = client
+        .query_one("SELECT COUNT(*) FROM wxyc_library", &[])
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 2, "import-wxyc-library should have written 2 rows");
+
+    // Spot-check normalization made it through the pipe end-to-end.
+    let norm_artist: String = client
+        .query_one(
+            "SELECT norm_artist FROM wxyc_library WHERE library_id = 101",
+            &[],
+        )
+        .unwrap()
+        .get(0);
+    assert_eq!(norm_artist, "juana molina");
+
+    // Reject path: invalid --snapshot-source must fail before any write.
+    Command::cargo_bin("wikidata-cache")
+        .unwrap()
+        .arg("import-wxyc-library")
+        .arg("--library-db")
+        .arg(&library_db_path)
+        .arg("--database-url")
+        .arg(TEST_DB_URL)
+        .arg("--snapshot-source")
+        .arg("bogus")
+        .assert()
+        .failure();
 }
 
 /// Regression test for the bulk-import-clobbers-wxyc_library bug.

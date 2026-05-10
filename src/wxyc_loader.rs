@@ -242,20 +242,25 @@ pub fn populate_wxyc_library_v2(
 
     let mut attempted: u64 = 0;
     for r in &rows {
-        // norm_artist / norm_title are NOT NULL per §3.1; the normalizer
-        // collapses to a non-empty string for any non-empty input. If it
-        // ever returns an empty string for a real artist/title, that's a
-        // bug worth crashing on — no `or ""` fallback.
-        let norm_artist = to_identity_match_form(&r.artist_name);
-        let norm_title = to_identity_match_form_title(&r.album_title);
-        let norm_label_v = norm_label(r.label_name.as_deref());
-
+        // Strip NUL bytes BEFORE normalization so derived columns inherit the
+        // PG-safe form. Reversing the order would let a NUL byte in the source
+        // pass through into norm_artist / norm_title / norm_label and crash
+        // the INSERT — every TEXT column that hits PostgreSQL must have been
+        // stripped, including the derived ones.
         let artist_name = strip_pg_null_bytes(&r.artist_name);
         let album_title = strip_pg_null_bytes(&r.album_title);
         let label_name = strip_pg_null_bytes_opt(r.label_name.as_deref());
         let format_name = strip_pg_null_bytes_opt(r.format_name.as_deref());
         let wxyc_genre = strip_pg_null_bytes_opt(r.wxyc_genre.as_deref());
         let call_letters = strip_pg_null_bytes_opt(r.call_letters.as_deref());
+
+        // norm_artist / norm_title are NOT NULL per §3.1; the normalizer
+        // collapses to a non-empty string for any non-empty input. If it
+        // ever returns an empty string for a real artist/title, that's a
+        // bug worth crashing on — no `or ""` fallback.
+        let norm_artist = to_identity_match_form(&artist_name);
+        let norm_title = to_identity_match_form_title(&album_title);
+        let norm_label_v = norm_label(label_name.as_deref());
 
         // For this cache today, every row stamps NULL on artist_id /
         // label_id / format_id / release_year — see the module-level
@@ -331,5 +336,43 @@ mod tests {
     #[test]
     fn allowed_snapshot_sources_pinned() {
         assert_eq!(ALLOWED_SNAPSHOT_SOURCES, &["backend", "tubafrenzy", "llm"]);
+    }
+
+    /// `read_library_db` adapts to whichever optional columns happen to be
+    /// present. The integration tests exercise the full-prod schema; this
+    /// unit test pins the minimal-schema branch (`id, artist, title` only).
+    /// Older library.db snapshots — and the smallest test fixtures — don't
+    /// carry label / format / genre / call_letters / release_call_number,
+    /// and the loader needs to handle those without a PRAGMA-keyed panic.
+    #[test]
+    fn read_library_db_minimal_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("library.db");
+
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE library (\
+                id INTEGER PRIMARY KEY, \
+                artist TEXT NOT NULL, \
+                title TEXT NOT NULL\
+            );\
+            INSERT INTO library (id, artist, title) VALUES \
+                (1, 'Juana Molina', 'DOGA'), \
+                (2, 'Stereolab', 'Aluminum Tunes');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let rows = read_library_db(&db_path).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].library_id, 1);
+        assert_eq!(rows[0].artist_name, "Juana Molina");
+        assert_eq!(rows[0].album_title, "DOGA");
+        // Optional columns must be None when the source schema doesn't carry them.
+        assert!(rows[0].label_name.is_none());
+        assert!(rows[0].format_name.is_none());
+        assert!(rows[0].wxyc_genre.is_none());
+        assert!(rows[0].call_letters.is_none());
+        assert!(rows[0].call_numbers.is_none());
     }
 }

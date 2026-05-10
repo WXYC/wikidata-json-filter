@@ -323,3 +323,79 @@ fn test_normalizer_is_to_identity_match_form() {
     // Re-bind so the unused-import lint doesn't fire.
     let _ = wxyc_loader::ALLOWED_SNAPSHOT_SOURCES;
 }
+
+/// Regression test: NUL bytes (U+0000) in source strings must be stripped
+/// from EVERY TEXT column the loader writes — including the derived
+/// `norm_artist` / `norm_title` / `norm_label` columns.
+///
+/// PostgreSQL TEXT cannot store `\0`; an unstripped NUL on any column would
+/// crash the INSERT. An earlier version of the loader normalized BEFORE
+/// stripping, which left NUL bytes intact in the norm columns; the strip
+/// now happens first, and the norms derive from the cleaned strings.
+#[test]
+fn test_loader_strips_nul_bytes_from_norm_columns() {
+    let _lock = lock_db();
+    let mut client = test_client();
+    fresh_schema(&mut client);
+
+    // library.db with NUL bytes embedded in artist/title/label.
+    let tmp = tempfile::TempDir::new().unwrap();
+    let db_path = tmp.path().join("library.db");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE library (\
+            id INTEGER PRIMARY KEY, \
+            artist TEXT NOT NULL, \
+            title TEXT NOT NULL, \
+            label TEXT\
+        );",
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO library (id, artist, title, label) VALUES (?, ?, ?, ?)",
+        rusqlite::params![42_i64, "Juana\0 Molina", "DO\0GA", "Sona\0mos",],
+    )
+    .unwrap();
+    drop(conn);
+
+    let written = populate_wxyc_library_v2(&mut client, &db_path, "backend").unwrap();
+    assert_eq!(written, 1, "loader should attempt 1 row");
+
+    // Display columns: NUL stripped.
+    let row = client
+        .query_one(
+            "SELECT artist_name, album_title, label_name, \
+                    norm_artist, norm_title, norm_label \
+             FROM wxyc_library WHERE library_id = 42",
+            &[],
+        )
+        .unwrap();
+    let artist_name: String = row.get(0);
+    let album_title: String = row.get(1);
+    let label_name: Option<String> = row.get(2);
+    let norm_artist: String = row.get(3);
+    let norm_title: String = row.get(4);
+    let norm_label: Option<String> = row.get(5);
+
+    for col in [
+        &artist_name,
+        &album_title,
+        label_name.as_deref().unwrap(),
+        &norm_artist,
+        &norm_title,
+        norm_label.as_deref().unwrap(),
+    ] {
+        assert!(
+            !col.contains('\0'),
+            "NUL byte survived in column value {col:?} — every TEXT column must be stripped, including derived norm columns"
+        );
+    }
+
+    // Sanity-check the cleaned forms.
+    assert_eq!(artist_name, "Juana Molina");
+    assert_eq!(album_title, "DOGA");
+    assert_eq!(label_name.as_deref(), Some("Sonamos"));
+    assert_eq!(norm_artist, "juana molina");
+    assert_eq!(norm_title, "doga");
+    assert_eq!(norm_label.as_deref(), Some("sonamos"));
+}

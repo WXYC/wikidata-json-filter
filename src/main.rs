@@ -24,6 +24,7 @@ use wikidata_cache::import;
 use wikidata_cache::import_schema;
 use wikidata_cache::model::Entity;
 use wikidata_cache::writer::CsvOutput;
+use wikidata_cache::wxyc_loader;
 
 const DATABASE_URL_ENV: &str = "DATABASE_URL_WIKIDATA";
 
@@ -75,6 +76,25 @@ enum Commands {
         #[arg(long, hide = true)]
         csv_dir: Option<PathBuf>,
     },
+    /// Populate the `wxyc_library` cross-cache identity hook from a SQLite
+    /// `library.db` (E1 §4.1.3 of the cross-cache-identity plan).
+    ///
+    /// Idempotent on `library_id` (`ON CONFLICT DO NOTHING`); safe to re-run.
+    /// Expects the `wxyc_library` table to already exist — apply
+    /// `migrations/0002_wxyc_library_v2.sql` (via `sqlx migrate run`) or run
+    /// the `import` subcommand first to create the table inline.
+    ImportWxycLibrary {
+        /// Path to the SQLite `library.db` (a wxyc-catalog export).
+        #[arg(long)]
+        library_db: PathBuf,
+
+        #[command(flatten)]
+        db: DatabaseArgs,
+
+        /// Origin of this snapshot. Must be one of: backend | tubafrenzy | llm.
+        #[arg(long, default_value = "backend")]
+        snapshot_source: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -83,6 +103,9 @@ fn main() -> Result<()> {
     let (tool, step) = match &cli.command {
         Commands::Build { .. } => ("wikidata-cache build", "build"),
         Commands::Import { .. } => ("wikidata-cache import", "import"),
+        Commands::ImportWxycLibrary { .. } => {
+            ("wikidata-cache import-wxyc-library", "import-wxyc-library")
+        }
     };
     let _logger_guard = logger::init(LoggerConfig {
         repo: "wikidata-cache",
@@ -118,8 +141,45 @@ fn main() -> Result<()> {
                     .context("Failed to resolve database URL")?;
                 run_import(&data_dir, &database_url, import.fresh)
             }
+            Commands::ImportWxycLibrary {
+                library_db,
+                db,
+                snapshot_source,
+            } => {
+                let database_url = resolve_database_url(&db, DATABASE_URL_ENV)
+                    .context("Failed to resolve database URL")?;
+                run_import_wxyc_library(&library_db, &database_url, &snapshot_source)
+            }
         }
     })
+}
+
+fn run_import_wxyc_library(
+    library_db: &Path,
+    database_url: &str,
+    snapshot_source: &str,
+) -> Result<()> {
+    let start = Instant::now();
+
+    eprintln!("Connecting to PostgreSQL...");
+    let mut client = postgres::Client::connect(database_url, postgres::NoTls)
+        .context("Failed to connect to PostgreSQL")?;
+
+    eprintln!(
+        "Loading wxyc_library hook from {} (snapshot_source={})...",
+        library_db.display(),
+        snapshot_source
+    );
+    let attempted =
+        wxyc_loader::populate_wxyc_library_v2(&mut client, library_db, snapshot_source)?;
+
+    let elapsed = start.elapsed();
+    eprintln!();
+    eprintln!("Done in {:.1}s", elapsed.as_secs_f64());
+    eprintln!("  Rows attempted: {attempted:>10}");
+    eprintln!("  Source:         {}", library_db.display());
+
+    Ok(())
 }
 
 /// Resolve the working directory, honouring the deprecated alias if it was passed.

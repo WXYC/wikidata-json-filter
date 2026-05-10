@@ -2935,6 +2935,7 @@ dependencies = [
  "predicates",
  "pretty_assertions",
  "rayon",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

@@ -9,7 +9,14 @@ use postgres::Client;
 /// The DDL SQL embedded from `schema/create_database.sql`.
 pub const DDL: &str = include_str!("../schema/create_database.sql");
 
-/// All 8 wikidata-cache tables in FK-safe import order (parent first).
+/// All wikidata-cache tables in FK-safe import order (parent first).
+///
+/// The first 8 entries are the streaming-filter output tables. `wxyc_library`
+/// is the cross-cache identity hook (E1 §4.1.3, see
+/// `migrations/0002_wxyc_library_v2.sql`) — it has no FK relationship to
+/// the other tables, so order is irrelevant; placed last because it's
+/// loaded by the separate `import-wxyc-library` subcommand rather than the
+/// CSV `import` subcommand.
 pub const ALL_TABLES: &[&str] = &[
     "entity",
     "discogs_mapping",
@@ -19,6 +26,7 @@ pub const ALL_TABLES: &[&str] = &[
     "label_hierarchy",
     "entity_alias",
     "occupation",
+    "wxyc_library",
 ];
 
 /// Apply the wikidata-cache schema DDL to the database.

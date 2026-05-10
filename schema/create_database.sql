@@ -62,3 +62,44 @@ CREATE TABLE IF NOT EXISTS occupation (
     occupation_qid TEXT NOT NULL,
     PRIMARY KEY (entity_qid, occupation_qid)
 );
+
+-- wxyc_library v2 hook (consolidated cross-cache identity schema). Mirrored
+-- from migrations/0002_wxyc_library_v2.sql per the dual-source pattern in
+-- CLAUDE.md "Migrations". Per E1 §4.1.3 of the cross-cache-identity plan,
+-- this cache is small enough that every index is built inline.
+-- See: https://github.com/WXYC/wiki/blob/main/plans/library-hook-canonicalization.md#413-homebrew-wikidata-port-5435
+CREATE TABLE IF NOT EXISTS wxyc_library (
+    library_id      INTEGER PRIMARY KEY,
+    artist_id       INTEGER,
+    artist_name     TEXT    NOT NULL,
+    album_title     TEXT    NOT NULL,
+    label_id        INTEGER,
+    label_name      TEXT,
+    format_id       INTEGER,
+    format_name     TEXT,
+    wxyc_genre      TEXT,
+    call_letters    TEXT,
+    call_numbers    INTEGER,
+    release_year    SMALLINT,
+    norm_artist     TEXT    NOT NULL,
+    norm_title      TEXT    NOT NULL,
+    norm_label      TEXT,
+    snapshot_at     TIMESTAMPTZ NOT NULL,
+    snapshot_source TEXT    NOT NULL
+        CHECK (snapshot_source IN ('backend', 'tubafrenzy', 'llm'))
+);
+
+CREATE INDEX IF NOT EXISTS wxyc_library_norm_artist_idx
+    ON wxyc_library (norm_artist);
+CREATE INDEX IF NOT EXISTS wxyc_library_norm_title_idx
+    ON wxyc_library (norm_title);
+CREATE INDEX IF NOT EXISTS wxyc_library_artist_id_idx
+    ON wxyc_library (artist_id);
+CREATE INDEX IF NOT EXISTS wxyc_library_format_id_idx
+    ON wxyc_library (format_id);
+CREATE INDEX IF NOT EXISTS wxyc_library_release_year_idx
+    ON wxyc_library (release_year);
+CREATE INDEX IF NOT EXISTS wxyc_library_norm_artist_trgm_idx
+    ON wxyc_library USING GIN (norm_artist gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS wxyc_library_norm_title_trgm_idx
+    ON wxyc_library USING GIN (norm_title gin_trgm_ops);

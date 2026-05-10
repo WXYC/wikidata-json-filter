@@ -4,3 +4,4 @@ pub mod import;
 pub mod import_schema;
 pub mod model;
 pub mod writer;
+pub mod wxyc_loader;

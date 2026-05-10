@@ -324,6 +324,53 @@ fn test_normalizer_is_to_identity_match_form() {
     let _ = wxyc_loader::ALLOWED_SNAPSHOT_SOURCES;
 }
 
+/// Regression test: a library.db row with an empty `artist` or `title`
+/// must be rejected by the loader before it lands in `wxyc_library`.
+///
+/// Postgres `NOT NULL` rejects SQL NULL but NOT empty strings; without an
+/// explicit guard, an empty input would silently land with empty norm
+/// columns and defeat downstream NULL-aware joins. Pin the loud-failure
+/// behavior so a future refactor can't silently regress it.
+#[test]
+fn test_loader_rejects_empty_artist_or_title() {
+    let _lock = lock_db();
+    let mut client = test_client();
+    fresh_schema(&mut client);
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let db_path = tmp.path().join("library.db");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE library (\
+            id INTEGER PRIMARY KEY, \
+            artist TEXT NOT NULL, \
+            title TEXT NOT NULL\
+        );",
+    )
+    .unwrap();
+    // Empty artist string — must be rejected.
+    conn.execute(
+        "INSERT INTO library (id, artist, title) VALUES (?, ?, ?)",
+        rusqlite::params![1_i64, "", "Some Title"],
+    )
+    .unwrap();
+    drop(conn);
+
+    let err = populate_wxyc_library_v2(&mut client, &db_path, "backend").unwrap_err();
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("artist_name or album_title is empty"),
+        "expected empty-input error, got: {msg}"
+    );
+
+    // No rows should have made it into the table.
+    let count: i64 = client
+        .query_one("SELECT COUNT(*) FROM wxyc_library", &[])
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 0, "loader must not write any rows when bailing");
+}
+
 /// Regression test: NUL bytes (U+0000) in source strings must be stripped
 /// from EVERY TEXT column the loader writes — including the derived
 /// `norm_artist` / `norm_title` / `norm_label` columns.

@@ -20,7 +20,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use wikidata_cache::import_schema;
 use wikidata_cache::wxyc_loader::{
-    self, ALLOWED_SNAPSHOT_SOURCES, NORMALIZER_NAME, populate_wxyc_library_v2,
+    ALLOWED_SNAPSHOT_SOURCES, NORMALIZER_NAME, populate_wxyc_library_v2,
 };
 
 const TEST_DB_URL: &str =
@@ -319,9 +319,6 @@ fn test_normalizer_is_to_identity_match_form() {
         !norm_a_diacritic.contains('ü'),
         "diacritic survived normalization: {norm_a_diacritic:?}"
     );
-
-    // Re-bind so the unused-import lint doesn't fire.
-    let _ = wxyc_loader::ALLOWED_SNAPSHOT_SOURCES;
 }
 
 /// Regression test: a library.db row with an empty `artist` or `title`

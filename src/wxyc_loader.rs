@@ -102,8 +102,21 @@ pub fn read_library_db(library_db: &Path) -> Result<Vec<LibraryRow>> {
 
     let mut stmt = conn.prepare(&query)?;
     let rows = stmt.query_map([], |row| {
+        // i32 truncation on the integer columns must surface as a hard
+        // error, never silently land NULL — the cache schema declares
+        // INTEGER (PG i32) for both library_id and call_numbers, so an
+        // out-of-range source value is upstream corruption that should
+        // halt the loader rather than corrupt the hook.
+        let id_i64: i64 = row.get("id")?;
+        let library_id = i32::try_from(id_i64).map_err(|_| {
+            rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Integer,
+                format!("library.id {id_i64} does not fit in i32").into(),
+            )
+        })?;
         let mut r = LibraryRow {
-            library_id: row.get::<_, i64>("id")? as i32,
+            library_id,
             artist_name: row.get("artist")?,
             album_title: row.get("title")?,
             label_name: None,
@@ -126,10 +139,17 @@ pub fn read_library_db(library_db: &Path) -> Result<Vec<LibraryRow>> {
         }
         if cols.contains("release_call_number") {
             r.call_numbers = row
-                .get::<_, Option<i64>>("release_call_number")
-                .ok()
-                .flatten()
-                .map(|v| v as i32);
+                .get::<_, Option<i64>>("release_call_number")?
+                .map(|n| {
+                    i32::try_from(n).map_err(|_| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Integer,
+                            format!("library.release_call_number {n} does not fit in i32").into(),
+                        )
+                    })
+                })
+                .transpose()?;
         }
         Ok(r)
     })?;
@@ -141,6 +161,13 @@ pub fn read_library_db(library_db: &Path) -> Result<Vec<LibraryRow>> {
     Ok(out)
 }
 
+/// Read column names from `PRAGMA table_info`, normalized to lowercase.
+///
+/// SQLite identifiers are case-insensitive in DDL but `PRAGMA` returns them
+/// as declared (`Label` vs `label`). Lowercasing the set lets the
+/// optional-column probe in `read_library_db` match regardless of source
+/// casing — otherwise a future `library.db` declared with `Label` would
+/// silently miss the lookup and the column would stay `None` with no error.
 fn existing_columns(
     conn: &rusqlite::Connection,
     table: &str,
@@ -149,7 +176,7 @@ fn existing_columns(
     let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
     let mut set = std::collections::HashSet::new();
     for n in names {
-        set.insert(n?);
+        set.insert(n?.to_ascii_lowercase());
     }
     Ok(set)
 }

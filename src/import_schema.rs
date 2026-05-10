@@ -9,14 +9,32 @@ use postgres::Client;
 /// The DDL SQL embedded from `schema/create_database.sql`.
 pub const DDL: &str = include_str!("../schema/create_database.sql");
 
-/// All wikidata-cache tables in FK-safe import order (parent first).
+/// CSV streaming-filter output tables in FK-safe import order (parent first).
 ///
-/// The first 8 entries are the streaming-filter output tables. `wxyc_library`
-/// is the cross-cache identity hook (E1 §4.1.3, see
-/// `migrations/0002_wxyc_library_v2.sql`) — it has no FK relationship to
-/// the other tables, so order is irrelevant; placed last because it's
-/// loaded by the separate `import-wxyc-library` subcommand rather than the
-/// CSV `import` subcommand.
+/// Used by the bulk-import lifecycle (`truncate_all`, `set_tables_unlogged`,
+/// `set_tables_logged`, `vacuum_full`) wired into the CSV `import`
+/// subcommand. The list intentionally excludes `wxyc_library` — that table
+/// is populated by the separate `import-wxyc-library` subcommand and must
+/// NOT be truncated/vacuumed by the CSV import path, otherwise running
+/// `wikidata-cache import` would silently wipe the cross-cache identity hook.
+pub const CSV_IMPORT_TABLES: &[&str] = &[
+    "entity",
+    "discogs_mapping",
+    "influence",
+    "genre",
+    "record_label",
+    "label_hierarchy",
+    "entity_alias",
+    "occupation",
+];
+
+/// Every table managed by this repo, including the `wxyc_library` cross-cache
+/// identity hook (E1 §4.1.3, see `migrations/0002_wxyc_library_v2.sql`).
+///
+/// Used by `drop_schema` (so `--fresh` drops everything) and by the schema
+/// test that asserts every table is created. The bulk-import lifecycle
+/// functions deliberately use `CSV_IMPORT_TABLES` instead — see that
+/// constant's docstring for why.
 pub const ALL_TABLES: &[&str] = &[
     "entity",
     "discogs_mapping",
@@ -62,38 +80,42 @@ pub fn drop_schema(client: &mut Client) -> Result<()> {
     Ok(())
 }
 
-/// Truncate all tables (in reverse FK order) for idempotent re-import.
+/// Truncate the CSV-import tables (in reverse FK order) for idempotent re-import.
+///
+/// Excludes `wxyc_library` — that table is owned by the `import-wxyc-library`
+/// subcommand and must survive a CSV `import` rerun.
 pub fn truncate_all(client: &mut Client) -> Result<()> {
-    for table in ALL_TABLES.iter().rev() {
+    for table in CSV_IMPORT_TABLES.iter().rev() {
         client.batch_execute(&format!("TRUNCATE {table} CASCADE"))?;
     }
     Ok(())
 }
 
-/// Set tables to UNLOGGED mode for faster bulk import (disables WAL).
+/// Set the CSV-import tables to UNLOGGED mode for faster bulk import (disables WAL).
 ///
 /// Processes child tables first (reverse FK order), then parent tables,
-/// because a logged table cannot reference an unlogged table.
+/// because a logged table cannot reference an unlogged table. `wxyc_library`
+/// stays LOGGED — it isn't part of the bulk-import path.
 pub fn set_tables_unlogged(client: &mut Client) -> Result<()> {
-    for table in ALL_TABLES.iter().rev() {
+    for table in CSV_IMPORT_TABLES.iter().rev() {
         client.batch_execute(&format!("ALTER TABLE {table} SET UNLOGGED"))?;
     }
     Ok(())
 }
 
-/// Restore tables to LOGGED mode (re-enables WAL durability).
+/// Restore the CSV-import tables to LOGGED mode (re-enables WAL durability).
 ///
 /// Processes parent tables first (FK order) so child tables can reference them.
 pub fn set_tables_logged(client: &mut Client) -> Result<()> {
-    for table in ALL_TABLES {
+    for table in CSV_IMPORT_TABLES {
         client.batch_execute(&format!("ALTER TABLE {table} SET LOGGED"))?;
     }
     Ok(())
 }
 
-/// Run VACUUM FULL on all tables to reclaim space after bulk import.
+/// Run VACUUM FULL on the CSV-import tables to reclaim space after bulk import.
 pub fn vacuum_full(client: &mut Client) -> Result<()> {
-    for table in ALL_TABLES {
+    for table in CSV_IMPORT_TABLES {
         client.batch_execute(&format!("VACUUM FULL {table}"))?;
     }
     Ok(())

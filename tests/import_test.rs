@@ -669,3 +669,60 @@ fn test_import_subcommand() {
         .get(0);
     assert_eq!(count, 5, "Import subcommand should load 5 entities");
 }
+
+/// Regression test for the bulk-import-clobbers-wxyc_library bug.
+///
+/// `truncate_all` is called by the CSV `import` subcommand on every run.
+/// `wxyc_library` is loaded by the separate `import-wxyc-library`
+/// subcommand and must NOT be wiped by a CSV import. Before the
+/// `CSV_IMPORT_TABLES` / `ALL_TABLES` split, every CSV import would
+/// silently truncate `wxyc_library`. This test pins the new contract.
+#[test]
+fn test_truncate_all_preserves_wxyc_library() {
+    let _lock = lock_db();
+    let mut client = test_client();
+    fresh_schema(&mut client);
+
+    // Seed both an `entity` row (CSV table; should be truncated) and a
+    // `wxyc_library` row (hook table; should survive).
+    client
+        .execute(
+            "INSERT INTO entity (qid, label, description, entity_type) VALUES ($1, $2, $3, $4)",
+            &[&"Q1", &"sentinel", &"sentinel-desc", &"human"],
+        )
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO wxyc_library (\
+                library_id, artist_name, album_title, \
+                norm_artist, norm_title, snapshot_at, snapshot_source\
+            ) VALUES ($1, $2, $3, $4, $5, NOW(), $6)",
+            &[
+                &1_i32,
+                &"Sentinel Artist",
+                &"Sentinel Album",
+                &"sentinel artist",
+                &"sentinel album",
+                &"backend",
+            ],
+        )
+        .unwrap();
+
+    import_schema::truncate_all(&mut client).unwrap();
+
+    let csv_count: i64 = client
+        .query_one("SELECT COUNT(*) FROM entity", &[])
+        .unwrap()
+        .get(0);
+    assert_eq!(csv_count, 0, "truncate_all should clear CSV tables");
+
+    let hook_count: i64 = client
+        .query_one("SELECT COUNT(*) FROM wxyc_library", &[])
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        hook_count, 1,
+        "truncate_all MUST NOT touch wxyc_library — that table is owned \
+         by the import-wxyc-library subcommand"
+    );
+}

@@ -171,10 +171,12 @@ fn strip_pg_null_bytes_opt(s: Option<&str>) -> Option<String> {
 /// Identity-tier normalization for the optional `norm_label` column.
 ///
 /// `to_identity_match_form` returns an empty string for empty input; we want
-/// NULL to flow through to PostgreSQL for the nullable `norm_label` column,
-/// so re-introduce the None at the boundary.
+/// NULL to flow through to PostgreSQL for the nullable `norm_label` column
+/// so downstream NULL-aware joins behave correctly. The `.filter` collapses
+/// both the `None` input case AND a `Some("")` post-normalization case
+/// (e.g. a `Some("   ")` whitespace-only label) to a single `None`.
 fn norm_label(value: Option<&str>) -> Option<String> {
-    value.map(to_identity_match_form)
+    value.map(to_identity_match_form).filter(|s| !s.is_empty())
 }
 
 /// Populate `wxyc_library` from a SQLite `library.db`.
@@ -331,6 +333,16 @@ mod tests {
         // pin lives in the integration tests against PG.
         let v = norm_label(Some("Sonamos"));
         assert_eq!(v.as_deref(), Some("sonamos"));
+    }
+
+    #[test]
+    fn norm_label_drops_empty_string() {
+        // `Some("")` and `Some("   ")` (whitespace that the normalizer
+        // collapses to "") must come back as `None` — a non-NULL empty
+        // string would defeat downstream NULL-aware lookups on norm_label.
+        // The docstring promises this; the test pins it.
+        assert_eq!(norm_label(Some("")), None);
+        assert_eq!(norm_label(Some("   ")), None);
     }
 
     #[test]

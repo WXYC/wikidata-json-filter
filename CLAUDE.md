@@ -94,6 +94,10 @@ The full rebuild (`build` then `import --fresh`) is scheduled via `.github/workf
 
 **Runner-capacity caveat:** the Wikidata JSON dump is roughly 130GB gzipped and a full rebuild can take many hours. GitHub-hosted `ubuntu-latest` runners have a 6-hour job timeout and only ~14GB of free disk, so the scheduled run will likely fail on disk or timeout. The workflow is intentionally a scheduling skeleton — the actual rebuild needs to migrate to a self-hosted runner, a Railway job, or a dedicated EC2 box. Until then, treat the `workflow_dispatch` trigger as the supported path (e.g., for small-dump smoke tests) and run real rebuilds out-of-band.
 
+## wxyc-etl vendoring (cross-cache-identity)
+
+This repo deploys the `wxyc_identity_match_*` plpgsql function family for cross-cache identity matching. The canonical sources live in WXYC/wxyc-etl@v0.4.0 (`data/`); we vendor byte-for-byte copies under `vendor/wxyc-etl/` (top-level `data/` would conflict with `--data-dir` runtime use). SHA-pinned in `wxyc-etl-pin.txt`. Migration `migrations/0003_wxyc_identity_match_functions.sql` is a sqlx-cli-friendly wrapper that sets up the `wxyc_unaccent` text-search dictionary and then inlines the canonical SQL. The parity test in `tests/wxyc_identity_match_parity_test.rs` enforces pin freshness, migration-vs-canonical byte-equality, and PG-side fixture parity (252 rows + idempotence).
+
 ## Migrations
 
 Schema changes ship as numbered SQL files under `migrations/`, applied with [sqlx-cli](https://crates.io/crates/sqlx-cli). The baseline `migrations/0001_initial.sql` mirrors `schema/create_database.sql`.

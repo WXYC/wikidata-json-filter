@@ -46,6 +46,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install wxyc_unaccent rules into the PG service container
+        # Required by migrations/0003_wxyc_identity_match_functions.sql.
+        # Alpine layout: /usr/local/share/postgresql/tsearch_data.
+        run: |
+          PG_CID=$(docker ps -q --filter ancestor=postgres:16-alpine)
+          if [ -z "$PG_CID" ]; then
+            echo "no postgres:16-alpine service container running" >&2
+            exit 1
+          fi
+          docker cp vendor/wxyc-etl/wxyc_unaccent.rules \
+            "$PG_CID:/usr/local/share/postgresql/tsearch_data/wxyc_unaccent.rules"
+          docker cp vendor/wxyc-etl/wxyc_unaccent.version \
+            "$PG_CID:/usr/local/share/postgresql/tsearch_data/wxyc_unaccent.version"
       - name: Run PostgreSQL integration tests
         env:
           TEST_DATABASE_URL: postgresql://wikidata:wikidata@localhost:5435/wikidata_test
@@ -54,3 +67,7 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://wikidata:wikidata@localhost:5435/wikidata_test
         run: cargo test --test charset_torture -- --test-threads=1 --include-ignored
+      - name: Run wxyc_identity_match_* parity test
+        env:
+          TEST_DATABASE_URL: postgresql://wikidata:wikidata@localhost:5435/wikidata_test
+        run: cargo test --test wxyc_identity_match_parity_test -- --ignored --test-threads=1

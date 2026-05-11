@@ -14,8 +14,7 @@ Purpose-built Rust tool that builds the WXYC `wikidata-cache` PostgreSQL databas
 - `writer.rs` -- `CsvOutput` wraps `wxyc_etl::csv_writer::MultiCsvWriter` for 8 CSV files with headers matching the wikidata-cache PostgreSQL schema. Implements `wxyc_etl::pipeline::PipelineOutput<ExtractedRows>`. The `csv_file_specs()` function defines the 8-file spec.
 - `import.rs` -- CSV import module. Reads the 8 CSV files and streams them into PostgreSQL via COPY TEXT. Handles RFC 4180 quoted fields, Unicode, and empty CSVs.
 - `import_schema.rs` -- PostgreSQL schema management. Embeds and applies `schema/create_database.sql`. Provides UNLOGGED/LOGGED toggle and VACUUM FULL for bulk import performance. Table constants define FK-safe import order.
-<<<<<<< HEAD
-- `main.rs` -- CLI (clap derive) with subcommand architecture. Default mode runs the three-stage filter pipeline via `wxyc_etl::pipeline`; `import` subcommand loads CSVs into PostgreSQL. Initializes `wxyc_etl::logger` (Sentry + JSON logs) at startup and wraps each subcommand in a tracing span tagged `repo`/`tool`/`step`.
+- `main.rs` -- CLI (clap derive) using shared argument groups from `wxyc_etl::cli` (`DatabaseArgs`, `ResumableBuildArgs`, `ImportArgs`). The `build` subcommand runs the three-stage filter pipeline via `wxyc_etl::pipeline`; the `import` subcommand loads CSVs into PostgreSQL. `--database-url` falls back to `DATABASE_URL_WIKIDATA` via `wxyc_etl::cli::resolve_database_url`. `--output-dir` (build) and `--csv-dir` (import) are accepted as deprecated aliases for `--data-dir` with a stderr warning. Initializes `wxyc_etl::logger` (Sentry + JSON logs) at startup and wraps each subcommand in a tracing span tagged `repo`/`tool`/`step`.
 
 ### Observability
 
@@ -29,9 +28,6 @@ The binary uses `wxyc_etl::logger::init` to set up structured JSON logging on st
 | `run_id` | UUIDv4 generated per process |
 
 `SENTRY_DSN` is optional; without it, JSON logging still works and Sentry stays inactive. Provisioning the DSN in deploy environments (CI, Railway, etc.) is tracked separately.
-=======
-- `main.rs` -- CLI (clap derive) using shared argument groups from `wxyc_etl::cli` (`DatabaseArgs`, `ResumableBuildArgs`, `ImportArgs`). The `build` subcommand runs the three-stage filter pipeline via `wxyc_etl::pipeline`; the `import` subcommand loads CSVs into PostgreSQL. `--database-url` falls back to `DATABASE_URL_WIKIDATA` via `wxyc_etl::cli::resolve_database_url`. `--output-dir` (build) and `--csv-dir` (import) are accepted as deprecated aliases for `--data-dir` with a stderr warning.
->>>>>>> 6cffa05 (Migrate CLI to standardized cache-builder shape)
 
 ### Parallel Processing Pipeline
 

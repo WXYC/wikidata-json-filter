@@ -89,25 +89,29 @@ fn pin_file_sha256s_match_vendored_files() {
     }
 }
 
+/// Sentinel emitted by the wrapper prelude just before the canonical body.
+/// Anchoring the split here (rather than the first line of the canonical)
+/// prevents a future wrapper edit that happens to paste that first line from
+/// silently moving the split point.
+const CANONICAL_SENTINEL: &str = "-- @BEGIN CANONICAL BODY (do not edit; vendored from wxyc-etl)\n";
+
 #[test]
 fn migration_inlines_canonical_sql_byte_for_byte() {
     let migration = read("migrations/0003_wxyc_identity_match_functions.sql");
     let canonical = read("vendor/wxyc-etl/wxyc_identity_match_functions.sql");
-    // Migration = wrapper prefix + canonical body verbatim. Find the canonical
-    // body inside the migration and assert byte-equality at that offset.
     let migration = String::from_utf8(migration).expect("migration is UTF-8");
     let canonical = String::from_utf8(canonical).expect("canonical SQL is UTF-8");
-    let first_line_of_canonical = canonical
-        .lines()
-        .next()
-        .expect("canonical SQL has at least one line");
-    let split_idx = migration
-        .find(first_line_of_canonical)
-        .unwrap_or_else(|| panic!("migration is missing the canonical SQL — re-generate by appending vendor/wxyc-etl/wxyc_identity_match_functions.sql"));
+    let sentinel_idx = migration.find(CANONICAL_SENTINEL).unwrap_or_else(|| {
+        panic!(
+            "migration is missing the `{}` sentinel that marks the start of the vendored canonical body — re-generate the migration by appending the sentinel + vendor/wxyc-etl/wxyc_identity_match_functions.sql to the wrapper prelude",
+            CANONICAL_SENTINEL.trim_end()
+        )
+    });
+    let body_start = sentinel_idx + CANONICAL_SENTINEL.len();
     assert_eq!(
-        &migration[split_idx..],
+        &migration[body_start..],
         canonical,
-        "migration body after the wrapper prefix diverges from vendor/wxyc-etl/wxyc_identity_match_functions.sql — re-generate"
+        "migration body after the @BEGIN CANONICAL BODY sentinel diverges from vendor/wxyc-etl/wxyc_identity_match_functions.sql — re-vendor and regenerate"
     );
 }
 
@@ -233,6 +237,28 @@ fn postgres_functions_match_fixture_row_for_row() {
             failures.join("\n")
         );
     }
+}
+
+#[test]
+#[ignore]
+fn migration_double_apply_is_a_no_op() {
+    // Re-applying the whole migration must not throw and must leave the
+    // functions in the same state. CREATE OR REPLACE FUNCTION + DROP/CREATE
+    // TEXT SEARCH DICTIONARY are individually idempotent, but proving they
+    // compose cleanly when the migration is replayed end-to-end pins the
+    // contract this template makes to every consumer.
+    let Ok(db_url) = std::env::var("TEST_DATABASE_URL") else {
+        eprintln!("TEST_DATABASE_URL unset — skipping");
+        return;
+    };
+    let mut client = Client::connect(&db_url, postgres::NoTls).expect("connect to test PG");
+    apply_migration(&mut client);
+    apply_migration(&mut client);
+    let row = client
+        .query_one("SELECT wxyc_identity_match_artist('Stereolab')", &[])
+        .expect("query after double-apply");
+    let got: Option<String> = row.get(0);
+    assert_eq!(got.as_deref(), Some("stereolab"));
 }
 
 #[test]

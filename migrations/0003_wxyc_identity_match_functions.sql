@@ -2,8 +2,16 @@
 -- `wxyc_etl::text::to_identity_match_form` and its three siblings.
 --
 -- Vendored from WXYC/wxyc-etl@v0.4.0 — see `wxyc-etl-pin.txt` at repo root.
--- Refresh by re-vendoring `vendor/wxyc-etl/{wxyc_unaccent.rules,wxyc_unaccent.version,wxyc_identity_match_functions.sql}`
--- and re-running the parity test (which regenerates the wrapper section automatically? No — it just checks freshness; re-paste from vendor file when bumping).
+-- Refresh by re-vendoring the three files under `vendor/wxyc-etl/`, then
+-- re-pasting `wxyc_identity_match_functions.sql` after the @BEGIN CANONICAL
+-- marker below. The parity test checks SHAs + byte-equality after the
+-- sentinel; it does not regenerate the wrapper automatically.
+--
+-- The DROP+CREATE on the wxyc_unaccent dictionary below is safe today
+-- because no other migration depends on it. If a future migration adds a
+-- functional index or generated column over `unaccent('wxyc_unaccent', ...)`,
+-- this re-apply will fail without CASCADE — coordinate the rules-file
+-- refresh with that dependency at the time it lands.
 --
 -- Spec: WXYC/wiki `plans/library-hook-canonicalization.md` §3.3.5.
 
@@ -15,6 +23,7 @@ CREATE TEXT SEARCH DICTIONARY wxyc_unaccent (
   RULES = 'wxyc_unaccent'
 );
 
+-- @BEGIN CANONICAL BODY (do not edit; vendored from wxyc-etl)
 -- Canonical SQL implementation of the cross-cache-identity match form.
 --
 -- Vendored verbatim into every cache repo (discogs-etl, musicbrainz-cache,
